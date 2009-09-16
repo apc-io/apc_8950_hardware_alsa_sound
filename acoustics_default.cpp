@@ -16,7 +16,7 @@
  */
 
 
-#define LOG_TAG "AudioHardwareALSA"
+#define LOG_TAG "AcousticsModule"
 #include <utils/Log.h>
 
 #include "AudioHardwareALSA.h"
@@ -25,8 +25,9 @@ namespace android
 {
     static int s_device_open(const hw_module_t*, const char*, hw_device_t**);
     static int s_device_close (hw_device_t*);
-    static status_t s_set_acoustics (snd_pcm_t *, AudioSystem::audio_in_acoustics);
-    static ssize_t s_filter (snd_pcm_t *, void *, ssize_t);
+    static status_t s_open (snd_pcm_t *, AudioSystem::audio_in_acoustics);
+    static status_t s_close (snd_pcm_t *);
+    static status_t s_set_params (void *params);
 
     static hw_module_methods_t s_module_methods = {
         open: s_device_open
@@ -40,7 +41,6 @@ namespace android
             name: "ALSA acoustics module",
             author: "Wind River",
             methods: &s_module_methods,
-            reserved: {}
     };
 
     static int s_device_open(const hw_module_t* module,
@@ -58,8 +58,11 @@ namespace android
         dev->common.version = 0;
         dev->common.module = (hw_module_t *)module;
         dev->common.close = s_device_close;
-        dev->set_acoustics = s_set_acoustics;
-        dev->filter = s_filter;
+        dev->open = s_open;
+        dev->close = s_close;
+        dev->set_params = s_set_params;
+        dev->read = NULL;
+        dev->write = NULL;
 
         *device = &dev->common;
         return 0;
@@ -71,15 +74,20 @@ namespace android
         return 0;
     }
 
-    static status_t s_set_acoustics (snd_pcm_t *handle, AudioSystem::audio_in_acoustics acoustics)
+    static status_t s_open (snd_pcm_t *handle, AudioSystem::audio_in_acoustics acoustics)
     {
-        LOGD("Acoustics set_acoustics stub called with %d.", (int)acoustics);
+        LOGD("Acoustics open stub called with %d.", (int)acoustics);
         return NO_ERROR;
     }
 
-    static ssize_t s_filter (snd_pcm_t *handle, void *buffer, ssize_t frames)
+    static status_t s_close (snd_pcm_t *handle)
     {
-        // Default acoustics doesn't apply any filtering
-        return frames;
+        LOGD("Acoustics close stub called.");
+        return NO_ERROR;
+    }
+
+    static status_t s_set_params (void *params)
+    {
+        return NO_ERROR;
     }
 }

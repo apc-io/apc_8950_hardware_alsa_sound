@@ -231,6 +231,25 @@ status_t AudioHardwareALSA::setMasterVolume(float volume)
         return INVALID_OPERATION;
 }
 
+// non-default implementation
+size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
+{
+    if (!((sampleRate == 8000) || (sampleRate == 16000)))  {
+        LOGW("getInputBufferSize bad sampling rate: %d", sampleRate);
+        return 0;
+    }
+    if (format != AudioSystem::PCM_16_BIT) {
+        LOGW("getInputBufferSize bad format: %d", format);
+        return 0;
+    }
+    if (channelCount != 1) {
+        LOGW("getInputBufferSize bad channel count: %d", channelCount);
+        return 0;
+    }
+
+    return 320;
+}
+
 AudioStreamOut *
 AudioHardwareALSA::openOutputStream(int format,
                                     int channelCount,
@@ -254,6 +273,7 @@ AudioHardwareALSA::openOutputStream(int format,
         // Some information is expected to be available immediately after
         // the device is open.
         *status = mOutput->setDevice(mMode, mRoutes[mMode]);
+        mOutput->standby();
     }
     else {
         delete out;
@@ -292,6 +312,7 @@ AudioHardwareALSA::openInputStream(int      inputSource,
         // Some information is expected to be available immediately after
         // the device is open.
         *status = mInput->setDevice(mMode, mRoutes[mMode]);
+        mInput->standby();
     }
     else {
         delete in;
@@ -939,10 +960,6 @@ status_t AudioStreamOutALSA::setVolume(float volume)
 
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
-    snd_pcm_sframes_t n;
-    size_t            sent = 0;
-    status_t          err;
-
     AutoMutex lock(mLock);
 
     if (!mPowerLock) {
@@ -952,6 +969,13 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     if (!mHandle)
         ALSAStreamOps::setDevice(mMode, mDevice);
+
+    if (mParent->mAcousticDevice && mParent->mAcousticDevice->write)
+        return mParent->mAcousticDevice->write(mHandle, buffer, bytes);
+
+    snd_pcm_sframes_t n;
+    size_t            sent = 0;
+    status_t          err;
 
     do {
         n = snd_pcm_writei(mHandle,
@@ -1052,9 +1076,6 @@ status_t AudioStreamInALSA::setGain(float gain)
 
 ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 {
-    snd_pcm_sframes_t n, frames = snd_pcm_bytes_to_frames(mHandle, bytes);
-    status_t          err;
-
     AutoMutex lock(mLock);
 
     if (!mPowerLock) {
@@ -1065,23 +1086,24 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     if (!mHandle)
         ALSAStreamOps::setDevice(mMode, mDevice);
 
-    n = snd_pcm_readi(mHandle, buffer, frames);
-    if (n < frames) {
-        if (mHandle) {
-            if (n < 0)
-                n = snd_pcm_recover(mHandle, n, 0);
-            else
-                n = snd_pcm_prepare(mHandle);
-        }
-        return static_cast<ssize_t>(n);
-    }
+    if (mParent->mAcousticDevice && mParent->mAcousticDevice->read)
+        return mParent->mAcousticDevice->read(mHandle, buffer, bytes);
 
-    if (mParent->mAcousticDevice &&
-        mParent->mAcousticDevice->filter) {
-        n = mParent->mAcousticDevice->filter(mHandle, buffer, frames);
-        if (n < 0)
+    snd_pcm_sframes_t n, frames = snd_pcm_bytes_to_frames(mHandle, bytes);
+    status_t          err;
+
+    do {
+        n = snd_pcm_readi(mHandle, buffer, frames);
+        if (n < frames) {
+            if (mHandle) {
+                if (n < 0)
+                    n = snd_pcm_recover(mHandle, n, 0);
+                else
+                    n = snd_pcm_prepare(mHandle);
+            }
             return static_cast<ssize_t>(n);
-    }
+        }
+    } while (n == -EAGAIN);
 
     return static_cast<ssize_t>(snd_pcm_frames_to_bytes(mHandle, n));
 }
@@ -1098,7 +1120,7 @@ status_t AudioStreamInALSA::setDevice(int mode, uint32_t newDevice)
     status_t status = ALSAStreamOps::setDevice(mode, newDevice);
 
     if (status == NO_ERROR && mParent->mAcousticDevice)
-        status = mParent->mAcousticDevice->set_acoustics(mHandle, mAcoustics);
+        status = mParent->mAcousticDevice->open(mHandle, mAcoustics);
 
     return status;
 }
@@ -1107,12 +1129,26 @@ status_t AudioStreamInALSA::standby()
 {
     AutoMutex lock(mLock);
 
+    if (mHandle && mParent->mAcousticDevice)
+        mParent->mAcousticDevice->close(mHandle);
+
     close();
 
     if (mPowerLock) {
         release_wake_lock ("AudioInLock");
         mPowerLock = false;
     }
+
+    return NO_ERROR;
+}
+
+status_t AudioStreamInALSA::setAcousticParams(void *params)
+{
+    AutoMutex lock(mLock);
+
+    if (mParent->mAcousticDevice &&
+        mParent->mAcousticDevice->set_params)
+        return mParent->mAcousticDevice->set_params(params);
 
     return NO_ERROR;
 }

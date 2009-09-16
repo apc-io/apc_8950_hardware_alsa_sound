@@ -38,18 +38,39 @@ namespace android
         hw_device_t common;
 
         /**
-         * Set the provided acoustics for a particular ALSA pcm device.
+         * Open the provided acoustics for a particular ALSA pcm device.
          *
          * Returns: 0 on succes, error code on failure.
          */
-        status_t (*set_acoustics)(snd_pcm_t *, AudioSystem::audio_in_acoustics);
+        status_t (*open)(snd_pcm_t *, AudioSystem::audio_in_acoustics);
+
+        /**
+         * Close the provided acoustics for a particular ALSA pcm device.
+         *
+         * Returns: 0 on succes, error code on failure.
+         */
+        status_t (*close)(snd_pcm_t *);
+
+        /**
+         * Set vendor-specific parameters filtering.
+         *
+         * Returns: 0 on success, error code on failure.
+         */
+        status_t (*set_params)(void *);
 
         /**
          * Read callback with PCM data so that filtering may be applied.
          *
          * Returns: frames filtered on success, error code on failure.
          */
-        ssize_t (*filter)(snd_pcm_t *, void *, ssize_t);
+        ssize_t (*read)(snd_pcm_t *handle, void *buffer, size_t bytes);
+
+        /**
+         * Write callback with PCM data used for read filtering.
+         *
+         * Returns: frames accepted on success, error code on failure.
+         */
+        ssize_t (*write)(snd_pcm_t *handle, const void *buffer, size_t bytes);
     };
 
     // ----------------------------------------------------------------------------
@@ -233,6 +254,8 @@ namespace android
 
             virtual status_t        standby();
 
+            status_t                setAcousticParams(void* params);
+
         protected:
             friend class AudioHardwareALSA;
 
@@ -267,6 +290,8 @@ namespace android
             // mic mute
             virtual status_t        setMicMute(bool state);
             virtual status_t        getMicMute(bool* state);
+
+            virtual size_t getInputBufferSize(uint32_t sampleRate, int format, int channelCount);
 
             /** This method creates and opens the audio hardware output stream */
             virtual AudioStreamOut* openOutputStream(

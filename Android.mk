@@ -46,7 +46,7 @@ ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
 
   LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 
-  LOCAL_CFLAGS := -D_POSIX_SOURCE
+  LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
 
   LOCAL_C_INCLUDES += external/alsa-lib/include
 
