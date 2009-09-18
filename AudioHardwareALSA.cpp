@@ -273,7 +273,6 @@ AudioHardwareALSA::openOutputStream(int format,
         // Some information is expected to be available immediately after
         // the device is open.
         *status = mOutput->setDevice(mMode, mRoutes[mMode]);
-        mOutput->standby();
     }
     else {
         delete out;
@@ -312,7 +311,6 @@ AudioHardwareALSA::openInputStream(int      inputSource,
         // Some information is expected to be available immediately after
         // the device is open.
         *status = mInput->setDevice(mMode, mRoutes[mMode]);
-        mInput->standby();
     }
     else {
         delete in;
