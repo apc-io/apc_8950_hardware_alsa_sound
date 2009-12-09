@@ -40,7 +40,7 @@ struct alsa_device_t;
 
 struct alsa_handle_t {
     alsa_device_t *             module;
-    AudioSystem::audio_routes   devices;
+    snd_pcm_stream_t            direction;
     uint32_t                    curDev;
     int                         curMode;
     snd_pcm_t *                 handle;

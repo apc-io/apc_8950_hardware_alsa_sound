@@ -98,7 +98,7 @@ static const char *devicePrefix[SND_PCM_STREAM_LAST + 1] = {
 
 static alsa_handle_t _defaultsOut = {
     module      : 0,
-    devices     : AudioSystem::ROUTE_ALL,
+    direction   : SND_PCM_STREAM_PLAYBACK,
     curDev      : 0,
     curMode     : 0,
     handle      : 0,
@@ -112,7 +112,7 @@ static alsa_handle_t _defaultsOut = {
 
 static alsa_handle_t _defaultsIn = {
     module      : 0,
-    devices     : AudioSystem::ROUTE_ALL,
+    direction   : SND_PCM_STREAM_CAPTURE,
     curDev      : 0,
     curMode     : 0,
     handle      : 0,
@@ -147,12 +147,17 @@ static const int deviceSuffixLen = (sizeof(deviceSuffix)
 
 // ----------------------------------------------------------------------------
 
+snd_pcm_stream_t direction(alsa_handle_t *handle)
+{
+    return handle->direction;
+}
+
 const char *deviceName(alsa_handle_t *handle, uint32_t device, int mode)
 {
     static char devString[ALSA_NAME_MAX];
     int hasDevExt = 0;
 
-    strcpy(devString, devicePrefix[0]);
+    strcpy(devString, devicePrefix[direction(handle)]);
 
     for (int dev = 0; device && dev < deviceSuffixLen; dev++)
         if (device & deviceSuffix[dev].device) {
@@ -177,12 +182,6 @@ const char *deviceName(alsa_handle_t *handle, uint32_t device, int mode)
     };
 
     return devString;
-}
-
-snd_pcm_stream_t direction(alsa_handle_t *handle)
-{
-    return (handle->devices & AudioSystem::ROUTE_ALL) ? SND_PCM_STREAM_PLAYBACK
-            : SND_PCM_STREAM_CAPTURE;
 }
 
 const char *streamName(alsa_handle_t *handle)
@@ -376,7 +375,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     // Configure ALSA to start the transfer when the buffer is almost full.
     snd_pcm_get_params(handle->handle, &bufferSize, &periodSize);
 
-    if (handle->devices & AudioSystem::ROUTE_ALL) {
+    if (direction(handle) == SND_PCM_STREAM_PLAYBACK) {
         // For playback, configure ALSA to start the transfer when the
         // buffer is full.
         startThreshold = bufferSize - periodSize;
