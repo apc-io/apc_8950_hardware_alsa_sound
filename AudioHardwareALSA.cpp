@@ -617,7 +617,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
                                      int sessionId)
 {
     Mutex::Autolock autoLock(mLock);
-    LOGD("openOutputSession");
+    LOGD("openOutputSession = %d" ,sessionId);
     AudioStreamOutALSA *out = 0;
     status_t err = BAD_VALUE;
 
@@ -639,11 +639,20 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     alsa_handle.ucMgr = mUcMgr;
 
     char *use_case;
-    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-    if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(alsa_handle.useCase));
+    if(sessionId == TUNNEL_SESSION_ID) {
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_TUNNEL, sizeof(alsa_handle.useCase));
+        } else {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_TUNNEL, sizeof(alsa_handle.useCase));
+        }
     } else {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(alsa_handle.useCase));
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(alsa_handle.useCase));
+        } else {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(alsa_handle.useCase));
+        }
     }
     free(use_case);
     mDeviceList.push_back(alsa_handle);
@@ -651,10 +660,19 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     it--;
     LOGD("useCase %s", it->useCase);
     mALSADevice->route(&(*it), devices, mode());
-    if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
-        snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
-    } else {
-        snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
+    if(sessionId == TUNNEL_SESSION_ID) {
+        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) {
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_TUNNEL);
+        } else {
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_TUNNEL);
+        }
+    }
+    else {
+        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) {
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI_LOW_POWER);
+        } else {
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_LPA);
+        }
     }
     err = mALSADevice->open(&(*it));
     out = new AudioStreamOutALSA(this, &(*it));

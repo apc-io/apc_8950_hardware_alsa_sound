@@ -75,7 +75,9 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
     status_t status = NO_ERROR;
 
     if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
-       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
+       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA) ||
+       !strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL) ||
+       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) {
         volume = (left + right) / 2;
         if (volume < 0.0) {
             LOGW("AudioSessionOutMSM7xxx::setVolume(%f) under 0.0, assuming 0.0\n", volume);
@@ -91,6 +93,7 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 
         return status;
     }
+
     return INVALID_OPERATION;
 }
 

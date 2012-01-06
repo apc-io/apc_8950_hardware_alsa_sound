@@ -479,8 +479,9 @@ static status_t s_open(alsa_handle_t *handle)
     int err = NO_ERROR;
 
     /* No need to call s_close for LPA as pcm device open and close is handled by LPAPlayer in stagefright */
-    if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
-        LOGD("s_open: Opening LPA playback");
+    if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))
+    ||(!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) || (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        LOGD("s_open: Opening LPA /Tunnel playback");
         return NO_ERROR;
     }
 
@@ -892,7 +893,9 @@ static status_t s_close(alsa_handle_t *handle)
 
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
-              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))){
         disableDevice(handle);
     }
 
@@ -931,7 +934,9 @@ static status_t s_standby(alsa_handle_t *handle)
         }
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
-              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
         disableDevice(handle);
     }
 
