@@ -36,6 +36,10 @@
 
 #include "AudioHardwareALSA.h"
 
+extern "C" {
+#include "csd_client.h"
+}
+
 namespace android_audio_legacy
 {
 
@@ -87,11 +91,25 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 LOGD("read:: mParent->mIncallMode=%d", mParent->mIncallMode);
                 if ((mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                            sizeof(mHandle->useCase));
+                    if (mParent->mFusion3Platform) {
+                        mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
+                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+                                sizeof(mHandle->useCase));
+                        csd_client_start_record(INCALL_REC_STEREO);
+                    } else {
+                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                sizeof(mHandle->useCase));
+                    }
                 } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                            sizeof(mHandle->useCase));
+                    if (mParent->mFusion3Platform) {
+                        mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
+                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+                                sizeof(mHandle->useCase));
+                        csd_client_start_record(INCALL_REC_MONO);
+                    } else {
+                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                sizeof(mHandle->useCase));
+                    }
                 }
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(mHandle->useCase));
@@ -108,9 +126,25 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 LOGD("read:: ---- mParent->mIncallMode=%d", mParent->mIncallMode);
                 if ((mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC, sizeof(mHandle->useCase));
+                    if (mParent->mFusion3Platform) {
+                        mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
+                        strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
+                                sizeof(mHandle->useCase));
+                        csd_client_start_record(INCALL_REC_STEREO);
+                    } else {
+                        strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                                sizeof(mHandle->useCase));
+                    }
                 } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC, sizeof(mHandle->useCase));
+                   if (mParent->mFusion3Platform) {
+                       mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
+                       strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
+                               sizeof(mHandle->useCase));
+                       csd_client_start_record(INCALL_REC_MONO);
+                   } else {
+                       strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC,
+                               sizeof(mHandle->useCase));
+                   }
                 }
             } else if(mHandle->devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_REC, sizeof(mHandle->useCase));
@@ -134,7 +168,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
-            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_DL_REC)) {
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_DL_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
@@ -222,6 +257,13 @@ status_t AudioStreamInALSA::close()
         mParent->mVoipMicMute = 0;
      }
 
+    if (mParent->mFusion3Platform) {
+       if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
+           csd_client_stop_record();
+       }
+    }
+
     LOGD("close");
     ALSAStreamOps::close();
 
@@ -243,6 +285,13 @@ status_t AudioStreamInALSA::standby()
     }
 
     LOGD("standby");
+    if (mParent->mFusion3Platform) {
+       if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
+           LOGD(" into standby, stop record");
+           csd_client_stop_record();
+       }
+    }
 
     mHandle->module->standby(mHandle);
 

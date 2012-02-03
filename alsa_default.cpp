@@ -61,6 +61,7 @@ static void     s_enable_fens(bool flag);
 static void     s_set_flags(uint32_t flags);
 static status_t s_set_compressed_vol(int);
 static void     s_enable_slow_talk(bool flag);
+static void     s_set_voc_rec_mode(uint8_t mode);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -123,6 +124,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setFlags = s_set_flags;
     dev->setCompressedVolume = s_set_compressed_vol;
     dev->enableSlowTalk = s_enable_slow_talk;
+    dev->setVocRecMode = s_set_voc_rec_mode;
 
     *device = &dev->common;
 
@@ -1055,7 +1057,9 @@ int getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
             strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL))) {
+            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE))) {
         return (USECASE_TYPE_RX | USECASE_TYPE_TX);
     } else {
         LOGE("unknown use case %s\n", useCase);
@@ -1317,6 +1321,13 @@ void s_enable_wide_voice(bool flag)
             LOGE("s_enable_wide_voice: csd_client error %d", err);
         }
     }
+}
+
+void s_set_voc_rec_mode(uint8_t mode)
+{
+    LOGD("s_set_voc_rec_mode: mode %d", mode);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("Incall Rec Mode", mode, 0);
 }
 
 void s_enable_fens(bool flag)

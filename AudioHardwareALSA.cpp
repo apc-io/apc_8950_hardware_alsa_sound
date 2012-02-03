@@ -37,6 +37,10 @@
 
 #include "AudioHardwareALSA.h"
 
+extern "C" {
+#include "csd_client.h"
+}
+
 extern "C"
 {
     //
@@ -78,7 +82,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mDevSettingsFlag = 0;
             mDevSettingsFlag |= TTY_OFF;
             mBluetoothVGS = false;
-
+            mFusion3Platform = false;
 
             if((fp = fopen("/proc/asound/cards","r")) == NULL) {
                 LOGE("Cannot open /proc/asound/cards file to get sound card info");
@@ -110,6 +114,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
                     property_get("ro.baseband", baseband, "");
                     if (!strcmp("msm8960", platform) && !strcmp("mdm", baseband)) {
                         LOGV("Detected Fusion tabla 2.x");
+                        mFusion3Platform = true;
                         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_Fusion3");
                     } else {
                         LOGV("Detected tabla 2.x sound card");
@@ -272,6 +277,19 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
+    }
+
+    if (mFusion3Platform) {
+        key = String8(INCALLMUSIC_KEY);
+        if (param.get(key, value) == NO_ERROR) {
+            if (value == "true") {
+                LOGV("Enabling Incall Music setting in the setparameter\n");
+                csd_client_start_playback();
+            } else {
+                LOGV("Disabling Incall Music setting in the setparameter\n");
+                csd_client_stop_playback();
+            }
+        }
     }
 
     key = String8(ANC_KEY);
@@ -869,11 +887,25 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 mIncallMode = *channels;
                 if ((*channels & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
-                    strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                            sizeof(alsa_handle.useCase));
+                    if (mFusion3Platform) {
+                        mALSADevice->setVocRecMode(INCALL_REC_STEREO);
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+                                sizeof(alsa_handle.useCase));
+                        csd_client_start_record(INCALL_REC_STEREO);
+                    } else {
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                sizeof(alsa_handle.useCase));
+                    }
                 } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
-                    strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                            sizeof(alsa_handle.useCase));
+                    if (mFusion3Platform) {
+                        mALSADevice->setVocRecMode(INCALL_REC_MONO);
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+                                sizeof(alsa_handle.useCase));
+                        csd_client_start_record(INCALL_REC_MONO);
+                    } else {
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                sizeof(alsa_handle.useCase));
+                    }
                 }
             } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
@@ -889,9 +921,25 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 mIncallMode = *channels;
                 if ((*channels & AudioSystem::CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK)) {
-                    strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC, sizeof(alsa_handle.useCase));
+                    if (mFusion3Platform) {
+                        mALSADevice->setVocRecMode(INCALL_REC_STEREO);
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
+                                sizeof(alsa_handle.useCase));
+                        csd_client_start_record(INCALL_REC_STEREO);
+                    } else {
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                                sizeof(alsa_handle.useCase));
+                    }
                 } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
-                    strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC, sizeof(alsa_handle.useCase));
+                    if (mFusion3Platform) {
+                        mALSADevice->setVocRecMode(INCALL_REC_MONO);
+                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
+                                sizeof(alsa_handle.useCase));
+                        csd_client_start_record(INCALL_REC_MONO);
+                    } else {
+                       strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC,
+                               sizeof(alsa_handle.useCase));
+                    }
                 }
             } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_FM_REC, sizeof(alsa_handle.useCase));
@@ -916,7 +964,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC)) {
+           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
             snd_use_case_set(mUcMgr, "_verb", it->useCase);
         } else {
             snd_use_case_set(mUcMgr, "_enamod", it->useCase);

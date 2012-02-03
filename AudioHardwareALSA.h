@@ -77,6 +77,7 @@ class AudioHardwareALSA;
 #define WIDEVOICE_KEY       "wide_voice_enable"
 #define FENS_KEY            "fens_enable"
 #define ST_KEY              "st_enable"
+#define INCALLMUSIC_KEY     "incall_music_enabled"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -97,6 +98,11 @@ class AudioHardwareALSA;
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
+
+enum {
+    INCALL_REC_MONO,
+    INCALL_REC_STEREO,
+};
 
 struct alsa_handle_t {
     alsa_device_t *     module;
@@ -144,6 +150,7 @@ struct alsa_device_t {
     void     (*setFlags)(uint32_t);
     status_t (*setCompressedVolume)(int);
     void     (*enableSlowTalk)(bool);
+    void     (*setVocRecMode)(uint8_t);
 };
 
 // ----------------------------------------------------------------------------
@@ -452,6 +459,7 @@ protected:
     int mIsVoiceCallActive;
     int mIsFmActive;
     bool mBluetoothVGS;
+    bool mFusion3Platform;
 };
 
 // ----------------------------------------------------------------------------
