@@ -87,6 +87,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
                     if (strstr(soundCardInfo, "msm8960-tabla1x-snd-card")) {
                         codec_rev = 1;
                         break;
+                    } else if (strstr(soundCardInfo, "msm-snd-card")) {
+                        codec_rev = 2;
+                        break;
                     }
                 }
                 fclose(fp);
