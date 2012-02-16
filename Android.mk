@@ -99,6 +99,7 @@ endif
 LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-qmi/csd-client
 
 LOCAL_SRC_FILES:= \
     alsa_default.cpp \
@@ -107,7 +108,8 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
     liblog    \
-    libalsa-intf
+    libalsa-intf \
+    libcsd-client
 
 LOCAL_MODULE:= alsa.msm8960
 LOCAL_MODULE_TAGS := optional

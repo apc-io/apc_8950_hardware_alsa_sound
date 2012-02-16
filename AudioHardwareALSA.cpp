@@ -62,6 +62,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     FILE *fp;
     char soundCardInfo[200];
     hw_module_t *module;
+    char platform[128], baseband[128];
     int err = hw_get_module(ALSA_HARDWARE_MODULE_ID,
             (hw_module_t const**)&module);
     int codec_rev = 2;
@@ -99,8 +100,15 @@ AudioHardwareALSA::AudioHardwareALSA() :
                     LOGV("Detected tabla 1.x sound card");
                     snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
             } else {
-                    LOGV("Detected tabla 2.x sound card");
-                    snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x");
+                    property_get("ro.board.platform", platform, "");
+                    property_get("ro.baseband", baseband, "");
+                    if (!strcmp("msm8960", platform) && !strcmp("mdm", baseband)) {
+                        LOGV("Detected Fusion tabla 2.x");
+                        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_Fusion3");
+                    } else {
+                        LOGV("Detected tabla 2.x sound card");
+                        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x");
+                    }
             }
 
             if (mUcMgr < 0) {

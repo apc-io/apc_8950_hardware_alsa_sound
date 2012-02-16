@@ -24,6 +24,9 @@
 #include <linux/ioctl.h>
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
+extern "C" {
+#include "csd_client.h"
+}
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
@@ -147,6 +150,17 @@ static void disableDevice(alsa_handle_t *handle);
 static int callMode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
 
+bool platform_is_Fusion3()
+{
+    char platform[128], baseband[128];
+    property_get("ro.board.platform", platform, "");
+    property_get("ro.baseband", baseband, "");
+    if (!strcmp("msm8960", platform) && !strcmp("mdm", baseband))
+        return true;
+    else
+        return false;
+}
+
 int deviceName(alsa_handle_t *handle, unsigned flags, char **value)
 {
     int ret = 0;
@@ -258,6 +272,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
     bool inCallDevSwitch = false;
     char *rxDevice, *txDevice, ident[70];
+    int err = 0;
     LOGV("%s: device %d", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
@@ -338,6 +353,13 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         free(txDevice);
     }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
+
+    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3()) {
+        err = csd_client_switch_device(handle->ucMgr->tx_acdb_id, handle->ucMgr->rx_acdb_id);
+        if (err < 0) {
+            LOGE("switchDevice: csd_client error %d", err);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -586,6 +608,14 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         goto Error;
     }
 
+    if (platform_is_Fusion3()) {
+        err = csd_client_start_voice();
+        if (err < 0) {
+            LOGE("s_start_voice_call: csd_client error %d\n", err);
+            goto Error;
+        }
+    }
+
     free(devName);
     return NO_ERROR;
 
@@ -751,6 +781,16 @@ static status_t s_close(alsa_handle_t *handle)
         if(err != NO_ERROR) {
             LOGE("s_close: pcm_close failed for handle with err %d", err);
         }
+
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL) ||
+             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) &&
+            platform_is_Fusion3()) {
+            err = csd_client_stop_voice();
+            if (err < 0) {
+                LOGE("s_close: csd_client error %d\n", err);
+            }
+        }
+
         disableDevice(handle);
     } else if((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
               (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
@@ -982,9 +1022,17 @@ char *getUCMDevice(uint32_t devices, int input)
 
 void s_set_voice_volume(int vol)
 {
+    int err = 0;
     LOGD("s_set_voice_volume: volume %d", vol);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Rx Volume", vol, 0);
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_volume(vol);
+        if (err < 0) {
+            LOGE("s_set_voice_volume: csd_client error %d", err);
+        } 
+    }
 }
 
 void s_set_voip_volume(int vol)
@@ -995,9 +1043,17 @@ void s_set_voip_volume(int vol)
 }
 void s_set_mic_mute(int state)
 {
+    int err = 0;
     LOGD("s_set_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voice Tx Mute", state, 0);
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_mic_mute(state);
+        if (err < 0) {
+            LOGE("s_set_mic_mute: csd_client error %d", err);
+        }
+    }
 }
 
 void s_set_voip_mic_mute(int state)
