@@ -91,6 +91,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
                     } else if (strstr(soundCardInfo, "msm-snd-card")) {
                         codec_rev = 2;
                         break;
+                    } else if (strstr(soundCardInfo, "msm8930-sitar-snd-card")) {
+                        codec_rev = 3;
+                        break;
                     }
                 }
                 fclose(fp);
@@ -99,6 +102,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             if (codec_rev == 1) {
                     LOGV("Detected tabla 1.x sound card");
                     snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
+            } else if (codec_rev == 3) {
+                    LOGV("Detected sitar 1.x sound card");
+                    snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Sitar");
             } else {
                     property_get("ro.board.platform", platform, "");
                     property_get("ro.baseband", baseband, "");
