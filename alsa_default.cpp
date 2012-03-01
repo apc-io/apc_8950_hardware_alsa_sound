@@ -280,6 +280,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     bool inCallDevSwitch = false;
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
+    int rx_dev_id, tx_dev_id;
     LOGV("%s: device %d", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
@@ -381,6 +382,15 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             snd_use_case_set(handle->ucMgr, "_disdev", curTxUCMDevice);
        }
     }
+    LOGV("%s,rxDev:%s, txDev:%s, curRxDev:%s, curTxDev:%s\n", __FUNCTION__, rxDevice, txDevice, curRxUCMDevice, curTxUCMDevice);
+    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
+        err = csd_client_disable_device();
+        if (err < 0)
+        {
+            LOGE("csd_client_disable_device, failed, error %d", err);
+        }
+    }
+
     if (rxDevice != NULL) {
         snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
         strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
@@ -408,10 +418,28 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         free(use_case);
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 
-    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3()) {
-        err = csd_client_switch_device(handle->ucMgr->tx_acdb_id, handle->ucMgr->rx_acdb_id);
-        if (err < 0) {
-            LOGE("switchDevice: csd_client error %d", err);
+    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
+        /* get tx acdb id */
+        memset(&ident,0,sizeof(ident));
+        strlcpy(ident, "ACDBID/", sizeof(ident));
+        strlcat(ident, curTxUCMDevice, sizeof(ident));
+        tx_dev_id = snd_use_case_get(handle->ucMgr, ident, NULL);
+
+       /* get rx acdb id */
+        memset(&ident,0,sizeof(ident));
+        strlcpy(ident, "ACDBID/", sizeof(ident));
+        strlcat(ident, curRxUCMDevice, sizeof(ident));
+        rx_dev_id = snd_use_case_get(handle->ucMgr, ident, NULL);
+
+        if (rx_dev_id == DEVICE_SPEAKER_RX_ACDB_ID && tx_dev_id == DEVICE_HANDSET_TX_ACDB_ID) {
+            tx_dev_id = DEVICE_SPEAKER_TX_ACDB_ID;
+        }
+
+        LOGV("rx_dev_id=%d, tx_dev_id=%d\n", rx_dev_id, tx_dev_id);
+        err = csd_client_enable_device(rx_dev_id, tx_dev_id);
+        if (err < 0)
+        {
+            LOGE("csd_client_disable_device failed, error %d", err);
         }
     }
 }
