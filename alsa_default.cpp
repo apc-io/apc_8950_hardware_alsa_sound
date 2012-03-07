@@ -33,6 +33,8 @@ extern "C" {
 #endif
 
 #define BTSCO_RATE_16KHZ 16000
+#define USECASE_TYPE_RX 1
+#define USECASE_TYPE_TX 2
 
 namespace android_audio_legacy
 {
@@ -146,6 +148,7 @@ static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
 static char *getUCMDevice(uint32_t devices, int input);
 static void disableDevice(alsa_handle_t *handle);
+int getUseCaseType(const char *useCase);
 
 static int callMode = AudioSystem::MODE_NORMAL;
 // ----------------------------------------------------------------------------
@@ -849,25 +852,94 @@ static status_t s_route(alsa_handle_t *handle, uint32_t devices, int mode)
     return status;
 }
 
+int getUseCaseType(const char *useCase)
+{
+    LOGE("use case is %s\n", useCase);
+    if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI,
+           strlen(SND_USE_CASE_VERB_HIFI)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
+            strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
+            strlen(SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+            strlen(SND_USE_CASE_MOD_PLAY_MUSIC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
+            strlen(SND_USE_CASE_MOD_PLAY_LPA)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
+            strlen(SND_USE_CASE_MOD_PLAY_FM))) {
+        return USECASE_TYPE_RX;
+    } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
+            strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_FM_REC,
+            strlen(SND_USE_CASE_VERB_FM_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_FM_A2DP_REC,
+            strlen(SND_USE_CASE_VERB_FM_A2DP_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+            strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_FM,
+            strlen(SND_USE_CASE_MOD_CAPTURE_FM)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM,
+            strlen(SND_USE_CASE_MOD_CAPTURE_A2DP_FM))) {
+        return USECASE_TYPE_TX;
+    } else if (!strncmp(useCase, SND_USE_CASE_VERB_VOICECALL,
+            strlen(SND_USE_CASE_VERB_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+            strlen(SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_DL_REC,
+            strlen(SND_USE_CASE_VERB_DL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
+            strlen(SND_USE_CASE_VERB_UL_DL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE,
+            strlen(SND_USE_CASE_MOD_PLAY_VOICE)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+            strlen(SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL))) {
+        return (USECASE_TYPE_RX | USECASE_TYPE_TX);
+    } else {
+        LOGE("unknown use case %s\n", useCase);
+        return 0;
+    }
+}
+
 static void disableDevice(alsa_handle_t *handle)
 {
+    unsigned usecase_type = 0;
+    int i, mods_size;
     char *useCase;
+    const char **mods_list;
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&useCase);
     if (useCase != NULL) {
-        if (!strcmp(useCase, handle->useCase)) {
+        if (!strncmp(useCase, handle->useCase, MAX_UC_LEN)) {
             snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
         } else {
             snd_use_case_set(handle->ucMgr, "_dismod", handle->useCase);
         }
+        free(useCase);
+        snd_use_case_get(handle->ucMgr, "_verb", (const char **)&useCase);
+        if (strncmp(useCase, SND_USE_CASE_VERB_INACTIVE,
+               strlen(SND_USE_CASE_VERB_INACTIVE)))
+            usecase_type |= getUseCaseType(useCase);
+        mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
+        LOGE("Number of modifiers %d\n", mods_size);
+        if (mods_size) {
+            for(i = 0; i < mods_size; i++) {
+                LOGE("index %d modifier %s\n", i, mods_list[i]);
+                usecase_type |= getUseCaseType(mods_list[i]);
+            }
+        }
+        LOGE("usecase_type is %d\n", usecase_type);
+        if (!(usecase_type & USECASE_TYPE_TX) && (strncmp(curTxUCMDevice, "None", 4)))
+            snd_use_case_set(handle->ucMgr, "_disdev", curTxUCMDevice);
+        if (!(usecase_type & USECASE_TYPE_RX) && (strncmp(curRxUCMDevice, "None", 4)))
+            snd_use_case_set(handle->ucMgr, "_disdev", curRxUCMDevice);
     } else {
         LOGE("Invalid state, no valid use case found to disable");
     }
     free(useCase);
-    if (strcmp(curTxUCMDevice, "None"))
-        snd_use_case_set(handle->ucMgr, "_disdev", curTxUCMDevice);
-    if (strcmp(curRxUCMDevice, "None"))
-        snd_use_case_set(handle->ucMgr, "_disdev", curRxUCMDevice);
 }
 
 char *getUCMDevice(uint32_t devices, int input)
