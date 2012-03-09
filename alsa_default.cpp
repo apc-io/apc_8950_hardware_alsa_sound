@@ -67,6 +67,7 @@ static int fluence_mode;
 static int fmVolume;
 static uint32_t mDevSettingsFlag = TTY_OFF;
 static int btsco_samplerate = 8000;
+static ALSAUseCaseList mUseCaseList;
 
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
@@ -273,9 +274,12 @@ status_t setSoftwareParams(alsa_handle_t *handle)
 
 void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
+    const char **mods_list;
+    use_case_t useCaseNode;
+    unsigned usecase_type = 0;
     bool inCallDevSwitch = false;
-    char *rxDevice, *txDevice, ident[70];
-    int err = 0;
+    char *rxDevice, *txDevice, ident[70], *use_case = NULL;
+    int err = 0, index, mods_size;
     LOGV("%s: device %d", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
@@ -317,44 +321,91 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
     txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if ((rxDevice != NULL) && (txDevice != NULL)) {
-        if (((strcmp(rxDevice, curRxUCMDevice)) || (strcmp(txDevice, curTxUCMDevice))) &&
-            (mode == AudioSystem::MODE_IN_CALL))
+        if (((strncmp(rxDevice, curRxUCMDevice, MAX_STR_LEN)) ||
+             (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) && (mode == AudioSystem::MODE_IN_CALL))
             inCallDevSwitch = true;
     }
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
     if (rxDevice != NULL) {
-        if (strcmp(curRxUCMDevice, "None")) {
-            if ((!strcmp(rxDevice, curRxUCMDevice)) && (inCallDevSwitch != true)){
-                LOGV("Required device is already set, ignoring device enable");
-                snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
-            } else {
-                strlcpy(ident, "_swdev/", sizeof(ident));
-                strlcat(ident, curRxUCMDevice, sizeof(ident));
-                snd_use_case_set(handle->ucMgr, ident, rxDevice);
+        if ((strncmp(curRxUCMDevice, "None", 4)) &&
+            ((strncmp(rxDevice, curRxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
+            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+                usecase_type = getUseCaseType(use_case);
+                if (usecase_type & USECASE_TYPE_RX) {
+                    LOGD("Deroute use case %s type is %d\n", use_case, usecase_type);
+                    strlcpy(useCaseNode.useCase, use_case, MAX_STR_LEN);
+                    snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+                    mUseCaseList.push_front(useCaseNode);
+                }
             }
-        } else {
-            snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
+            if (mods_size) {
+                for(index = 0; index < mods_size; index++) {
+                    usecase_type = getUseCaseType(mods_list[index]);
+                    if (usecase_type & USECASE_TYPE_RX) {
+                        LOGD("Deroute use case %s type is %d\n", mods_list[index], usecase_type);
+                        strlcpy(useCaseNode.useCase, mods_list[index], MAX_STR_LEN);
+                        snd_use_case_set(handle->ucMgr, "_dismod", mods_list[index]);
+                        mUseCaseList.push_back(useCaseNode);
+                    }
+                }
+            }
+            snd_use_case_set(handle->ucMgr, "_disdev", curRxUCMDevice);
         }
-        strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
-        free(rxDevice);
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            s_set_fm_vol(fmVolume);
     }
     if (txDevice != NULL) {
-       if (strcmp(curTxUCMDevice, "None")) {
-           if ((!strcmp(txDevice, curTxUCMDevice)) && (inCallDevSwitch != true)){
-                LOGV("Required device is already set, ignoring device enable");
-                snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
-            } else {
-                strlcpy(ident, "_swdev/", sizeof(ident));
-                strlcat(ident, curTxUCMDevice, sizeof(ident));
-                snd_use_case_set(handle->ucMgr, ident, txDevice);
+        if ((strncmp(curTxUCMDevice, "None", 4)) &&
+            ((strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
+            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+                usecase_type = getUseCaseType(use_case);
+                if ((usecase_type & USECASE_TYPE_TX) && (!(usecase_type & USECASE_TYPE_RX))) {
+                    LOGD("Deroute use case %s type is %d\n", use_case, usecase_type);
+                    strlcpy(useCaseNode.useCase, use_case, MAX_STR_LEN);
+                    snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+                    mUseCaseList.push_front(useCaseNode);
+                }
             }
-        } else {
-            snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
-        }
-        strlcpy(curTxUCMDevice, txDevice, sizeof(curTxUCMDevice));
-        free(txDevice);
+            if (mods_size) {
+                for(index = 0; index < mods_size; index++) {
+                    usecase_type = getUseCaseType(mods_list[index]);
+                    if ((usecase_type & USECASE_TYPE_TX) && (!(usecase_type & USECASE_TYPE_RX))) {
+                        LOGD("Deroute use case %s type is %d\n", mods_list[index], usecase_type);
+                        strlcpy(useCaseNode.useCase, mods_list[index], MAX_STR_LEN);
+                        snd_use_case_set(handle->ucMgr, "_dismod", mods_list[index]);
+                        mUseCaseList.push_back(useCaseNode);
+                    }
+                }
+            }
+            snd_use_case_set(handle->ucMgr, "_disdev", curTxUCMDevice);
+       }
     }
+    if (rxDevice != NULL) {
+        snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
+        strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
+        if (devices & AudioSystem::DEVICE_OUT_FM)
+            s_set_fm_vol(fmVolume);
+        free(rxDevice);
+    }
+    if (txDevice != NULL) {
+       snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
+       strlcpy(curTxUCMDevice, txDevice, sizeof(curTxUCMDevice));
+       free(txDevice);
+    }
+    for(ALSAUseCaseList::iterator it = mUseCaseList.begin(); it != mUseCaseList.end(); ++it) {
+        LOGD("Route use case %s\n", it->useCase);
+        if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+            strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, it->useCase, MAX_UC_LEN))) {
+            snd_use_case_set(handle->ucMgr, "_verb", it->useCase);
+        } else {
+            snd_use_case_set(handle->ucMgr, "_enamod", it->useCase);
+        }
+    }
+    if (!mUseCaseList.empty())
+        mUseCaseList.clear();
+    if (use_case != NULL)
+        free(use_case);
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 
     if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3()) {

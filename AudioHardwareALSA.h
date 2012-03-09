@@ -105,7 +105,13 @@ struct alsa_handle_t {
     snd_use_case_mgr_t  *ucMgr;
 };
 
-typedef List<alsa_handle_t> ALSAHandleList;
+typedef List < alsa_handle_t > ALSAHandleList;
+
+struct use_case_t {
+    char                useCase[MAX_STR_LEN];
+};
+
+typedef List < use_case_t > ALSAUseCaseList;
 
 struct alsa_device_t {
     hw_device_t common;
