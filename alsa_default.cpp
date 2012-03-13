@@ -59,6 +59,8 @@ static status_t s_set_lpa_vol(int);
 static void     s_enable_wide_voice(bool flag);
 static void     s_enable_fens(bool flag);
 static void     s_set_flags(uint32_t flags);
+static status_t s_set_compressed_vol(int);
+
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -119,6 +121,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->enableWideVoice = s_enable_wide_voice;
     dev->enableFENS = s_enable_fens;
     dev->setFlags = s_set_flags;
+    dev->setCompressedVolume = s_set_compressed_vol;
 
     *device = &dev->common;
 
@@ -1271,6 +1274,16 @@ void s_set_flags(uint32_t flags)
 {
     LOGV("s_set_flags: flags %d", flags);
     mDevSettingsFlag = flags;
+}
+
+static status_t s_set_compressed_vol(int value)
+{
+    status_t err = NO_ERROR;
+
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("COMPRESSED RX Volume",value,0);
+
+    return err;
 }
 
 }

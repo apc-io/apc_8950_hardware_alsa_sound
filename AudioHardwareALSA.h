@@ -138,6 +138,8 @@ struct alsa_device_t {
     void     (*enableWideVoice)(bool);
     void     (*enableFENS)(bool);
     void     (*setFlags)(uint32_t);
+    status_t (*setCompressedVolume)(int);
+
 };
 
 // ----------------------------------------------------------------------------

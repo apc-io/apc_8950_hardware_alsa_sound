@@ -70,30 +70,34 @@ uint32_t AudioStreamOutALSA::channels() const
 
 status_t AudioStreamOutALSA::setVolume(float left, float right)
 {
-    int lpa_vol;
+    int vol;
     float volume;
     status_t status = NO_ERROR;
 
-    if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
-       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA) ||
-       !strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL) ||
-       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) {
-        volume = (left + right) / 2;
-        if (volume < 0.0) {
-            LOGW("AudioSessionOutMSM7xxx::setVolume(%f) under 0.0, assuming 0.0\n", volume);
-            volume = 0.0;
-        } else if (volume > 1.0) {
-            LOGW("AudioSessionOutMSM7xxx::setVolume(%f) over 1.0, assuming 1.0\n", volume);
-            volume = 1.0;
-        }
-        lpa_vol = lrint((volume * 100.0)+0.5);
-        LOGD("setLpaVolume(%f)\n", volume);
-        LOGD("Setting LPA volume to %d (available range is 0 to 100)\n", lpa_vol);
-        mHandle->module->setLpaVolume(lpa_vol);
+    volume = (left + right) / 2;
+    if (volume < 0.0) {
+        LOGW("AudioSessionOutALSA::setVolume(%f) under 0.0, assuming 0.0\n", volume);
+        volume = 0.0;
+    } else if (volume > 1.0) {
+        LOGW("AudioSessionOutALSA::setVolume(%f) over 1.0, assuming 1.0\n", volume);
+        volume = 1.0;
+    }
+    vol = lrint((volume * 100.0)+0.5);
 
+    if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
+       !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
+        LOGD("setLpaVolume(%f)\n", volume);
+        LOGD("Setting LPA volume to %d (available range is 0 to 100)\n", vol);
+        mHandle->module->setLpaVolume(vol);
         return status;
     }
-
+    else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) {
+        LOGD("setCompressedVolume(%f)\n", volume);
+        LOGD("Setting Compressed volume to %d (available range is 0 to 100)\n", vol);
+        mHandle->module->setCompressedVolume(vol);
+        return status;
+    }
     return INVALID_OPERATION;
 }
 
