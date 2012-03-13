@@ -960,12 +960,16 @@ int getUseCaseType(const char *useCase)
            strlen(SND_USE_CASE_VERB_HIFI)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
             strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
             strlen(SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
             strlen(SND_USE_CASE_MOD_PLAY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
             strlen(SND_USE_CASE_MOD_PLAY_LPA)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
             strlen(SND_USE_CASE_MOD_PLAY_FM))) {
         return USECASE_TYPE_RX;
