@@ -387,7 +387,9 @@ public:
             uint32_t devices,
             int *format,
             status_t *status,
-            int sessionId);
+            int sessionId,
+            uint32_t samplingRate=0,
+            uint32_t channels=0);
     virtual void closeOutputSession(AudioStreamOut* out);
 
     /** This method creates and opens the audio hardware output stream */

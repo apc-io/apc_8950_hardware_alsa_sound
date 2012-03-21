@@ -627,7 +627,9 @@ AudioStreamOut *
 AudioHardwareALSA::openOutputSession(uint32_t devices,
                                      int *format,
                                      status_t *status,
-                                     int sessionId)
+                                     int sessionId,
+                                     uint32_t samplingRate,
+                                     uint32_t channels)
 {
     Mutex::Autolock autoLock(mLock);
     LOGD("openOutputSession = %d" ,sessionId);

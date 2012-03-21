@@ -406,6 +406,8 @@ static int adev_open_output_session(struct audio_hw_device *dev,
                                    uint32_t devices,
                                    int *format,
                                    int sessionId,
+                                   uint32_t samplingRate,
+                                   uint32_t channels,
                                    struct audio_stream_out **stream_out)
 {
     struct qcom_audio_device *qadev = to_ladev(dev);
@@ -417,7 +419,7 @@ static int adev_open_output_session(struct audio_hw_device *dev,
     if (!out)
         return -ENOMEM;
 
-    out->qcom_out = qadev->hwif->openOutputSession(devices, format,&status,sessionId);
+    out->qcom_out = qadev->hwif->openOutputSession(devices, format,&status,sessionId,samplingRate,channels);
     if (!out->qcom_out) {
         ret = status;
         goto err_open;

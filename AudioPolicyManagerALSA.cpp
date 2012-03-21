@@ -543,7 +543,9 @@ void AudioPolicyManager::setPhoneState(int state)
 audio_io_handle_t AudioPolicyManager::getSession(AudioSystem::stream_type stream,
                                     uint32_t format,
                                     AudioSystem::output_flags flags,
-                                    int32_t sessionId)
+                                    int32_t sessionId,
+                                    uint32_t samplingRate,
+                                    uint32_t channels)
 {
     audio_io_handle_t output = 0;
     uint32_t latency = 0;
@@ -562,7 +564,9 @@ audio_io_handle_t AudioPolicyManager::getSession(AudioSystem::stream_type stream
                                     &outputDesc->mFormat,
                                     outputDesc->mFlags,
                                     stream,
-                                    sessionId);
+                                    sessionId,
+                                    samplingRate,
+                                    channels);
 
     // only accept an output with the requeted parameters
     if ((format != 0 && format != outputDesc->mFormat) || !output) {

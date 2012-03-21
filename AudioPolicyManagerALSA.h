@@ -70,7 +70,8 @@ public:
         virtual audio_io_handle_t getSession(AudioSystem::stream_type stream,
                                             uint32_t format,
                                             AudioSystem::output_flags flags,
-                                            int32_t  sessionId);
+                                            int32_t  sessionId,
+                                            uint32_t samplingRate, uint32_t channels);
         virtual void pauseSession(audio_io_handle_t output, AudioSystem::stream_type stream);
         virtual void resumeSession(audio_io_handle_t output, AudioSystem::stream_type stream);
         virtual void releaseSession(audio_io_handle_t output);
