@@ -450,7 +450,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
 
         LOGV("rx_dev_id=%d, tx_dev_id=%d\n", rx_dev_id, tx_dev_id);
-        err = csd_client_enable_device(rx_dev_id, tx_dev_id);
+        err = csd_client_enable_device(rx_dev_id, tx_dev_id, mDevSettingsFlag);
         if (err < 0)
         {
             LOGE("csd_client_disable_device failed, error %d", err);
