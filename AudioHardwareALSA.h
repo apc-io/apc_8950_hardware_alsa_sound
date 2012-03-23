@@ -77,6 +77,8 @@ class AudioHardwareALSA;
 #define WIDEVOICE_KEY "wide_voice_enable"
 #define FENS_KEY "fens_enable"
 
+#define DEVICE_SPEAKER_HEADSET 0x6
+
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
 #define QMIC_FLAG       0x00000004

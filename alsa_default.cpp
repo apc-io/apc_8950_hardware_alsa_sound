@@ -67,6 +67,7 @@ static int fluence_mode;
 static int fmVolume;
 static uint32_t mDevSettingsFlag = TTY_OFF;
 static int btsco_samplerate = 8000;
+static bool pflag = false;
 static ALSAUseCaseList mUseCaseList;
 
 static hw_module_methods_t s_module_methods = {
@@ -319,6 +320,15 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
     }
 
+    if ((handle->handle) && (devices == DEVICE_SPEAKER_HEADSET) &&
+       ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
+       (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+        pcm_close(handle->handle);
+        handle->handle=NULL;
+        handle->rxHandle=NULL;
+        pflag = true;
+    }
+
     rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
     txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
     if ((rxDevice != NULL) && (txDevice != NULL)) {
@@ -441,6 +451,13 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         {
             LOGE("csd_client_disable_device failed, error %d", err);
         }
+    }
+
+    if (pflag && (devices == DEVICE_SPEAKER_HEADSET) &&
+       ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
+       (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+        s_open(handle);
+        pflag = false;
     }
 }
 
