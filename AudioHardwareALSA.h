@@ -78,8 +78,6 @@ class AudioHardwareALSA;
 #define FENS_KEY            "fens_enable"
 #define ST_KEY              "st_enable"
 
-#define DEVICE_SPEAKER_HEADSET 0x6
-
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
 #define QMIC_FLAG       0x00000004
@@ -91,6 +89,11 @@ class AudioHardwareALSA;
 
 #define LPA_SESSION_ID 1
 #define TUNNEL_SESSION_ID 2
+
+#define DEVICE_SPEAKER_HEADSET "Speaker Headset"
+#define DEVICE_HEADSET "Headset"
+#define DEVICE_HEADPHONES "Headphones"
+
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
