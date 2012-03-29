@@ -1100,7 +1100,7 @@ char *getUCMDevice(uint32_t devices, int input)
              } else if (mDevSettingsFlag & TTY_FULL) {
                  return strdup(SND_USE_CASE_DEV_TTY_FULL_RX);
              } else if (mDevSettingsFlag & TTY_HCO) {
-                 return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+                 return strdup(SND_USE_CASE_DEV_TTY_HANDSET_RX); /* HANDSET RX */
              }
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
@@ -1166,9 +1166,9 @@ char *getUCMDevice(uint32_t devices, int input)
                  return strdup(SND_USE_CASE_DEV_TTY_FULL_TX);
              } else if (mDevSettingsFlag & TTY_VCO) {
                  if (!strncmp(mic_type, "analog", 6)) {
-                     return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
+                     return strdup(SND_USE_CASE_DEV_TTY_HANDSET_ANALOG_TX);
                  } else {
-                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                     return strdup(SND_USE_CASE_DEV_TTY_HANDSET_TX);
                  }
              }
         } else if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
