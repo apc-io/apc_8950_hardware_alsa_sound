@@ -112,7 +112,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         mPowerLock = true;
     }
 
-    snd_pcm_sframes_t n;
+    snd_pcm_sframes_t n = 0;
     size_t            sent = 0;
     status_t          err;
 

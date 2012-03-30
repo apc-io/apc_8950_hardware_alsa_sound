@@ -762,9 +762,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            alsa_handle.ucMgr = mUcMgr;
            snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
            if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-                strcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP);
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
            } else {
-                strcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL);
+                strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(alsa_handle.useCase));
            }
            free(use_case);
            mDeviceList.push_back(alsa_handle);
