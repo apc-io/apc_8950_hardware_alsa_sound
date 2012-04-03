@@ -60,7 +60,7 @@ static void     s_enable_wide_voice(bool flag);
 static void     s_enable_fens(bool flag);
 static void     s_set_flags(uint32_t flags);
 static status_t s_set_compressed_vol(int);
-
+static void     s_enable_slow_talk(bool flag);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -122,6 +122,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->enableFENS = s_enable_fens;
     dev->setFlags = s_set_flags;
     dev->setCompressedVolume = s_set_compressed_vol;
+    dev->enableSlowTalk = s_enable_slow_talk;
 
     *device = &dev->common;
 
@@ -1250,6 +1251,8 @@ void s_set_btsco_rate(int rate)
 
 void s_enable_wide_voice(bool flag)
 {
+    int err = 0;
+
     LOGD("s_enable_wide_voice: flag %d", flag);
     ALSAControl control("/dev/snd/controlC0");
     if(flag == true) {
@@ -1257,16 +1260,52 @@ void s_enable_wide_voice(bool flag)
     } else {
         control.set("Widevoice Enable", 0, 0);
     }
+
+    if (platform_is_Fusion3()) {
+        err == csd_client_wide_voice(flag);
+        if (err < 0) {
+            LOGE("s_enable_wide_voice: csd_client error %d", err);
+        }
+    }
 }
 
 void s_enable_fens(bool flag)
 {
+    int err = 0;
+
     LOGD("s_enable_fens: flag %d", flag);
     ALSAControl control("/dev/snd/controlC0");
     if(flag == true) {
         control.set("FENS Enable", 1, 0);
     } else {
         control.set("FENS Enable", 0, 0);
+    }
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_fens(flag);
+        if (err < 0) {
+            LOGE("s_enable_fens: csd_client error %d", err);
+        }
+    }
+}
+
+void s_enable_slow_talk(bool flag)
+{
+    int err = 0;
+
+    LOGD("s_enable_slow_talk: flag %d", flag);
+    ALSAControl control("/dev/snd/controlC0");
+    if(flag == true) {
+        control.set("Slowtalk Enable", 1, 0);
+    } else {
+        control.set("Slowtalk Enable", 0, 0);
+    }
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_slow_talk(flag);
+        if (err < 0) {
+            LOGE("s_enable_slow_talk: csd_client error %d", err);
+        }
     }
 }
 

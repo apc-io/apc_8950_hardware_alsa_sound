@@ -338,6 +338,19 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+
+    key = String8(ST_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        bool flag = false;
+        if (value == "true") {
+            flag = true;
+        }
+        if(mALSADevice) {
+            mALSADevice->enableSlowTalk(flag);
+        }
+        param.remove(key);
+    }
+
     if (param.size()) {
         status = BAD_VALUE;
     }

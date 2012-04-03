@@ -74,8 +74,9 @@ class AudioHardwareALSA;
 #define TTY_MODE_KEY        "tty_mode"
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
 #define BTHEADSET_VGS       "bt_headset_vgs"
-#define WIDEVOICE_KEY "wide_voice_enable"
-#define FENS_KEY "fens_enable"
+#define WIDEVOICE_KEY       "wide_voice_enable"
+#define FENS_KEY            "fens_enable"
+#define ST_KEY              "st_enable"
 
 #define DEVICE_SPEAKER_HEADSET 0x6
 
@@ -139,7 +140,7 @@ struct alsa_device_t {
     void     (*enableFENS)(bool);
     void     (*setFlags)(uint32_t);
     status_t (*setCompressedVolume)(int);
-
+    void     (*enableSlowTalk)(bool);
 };
 
 // ----------------------------------------------------------------------------
