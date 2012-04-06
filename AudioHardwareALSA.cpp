@@ -1107,6 +1107,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
+        //update channel info before do routing
+        if(channels) {
+            it->channels = AudioSystem::popCount((*channels) &
+                      (AudioSystem::CHANNEL_IN_STEREO |
+                       AudioSystem::CHANNEL_IN_MONO |
+                       AudioSystem::CHANNEL_IN_5POINT1));
+            LOGV("updated channel info: channels=%d", it->channels);
+        }
         if (devices == AudioSystem::DEVICE_IN_VOICE_CALL){
            /* Add current devices info to devices to do route */
             if(mCurDevice == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ||
@@ -1141,11 +1149,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if(sampleRate) {
             it->sampleRate = *sampleRate;
         }
-        if(channels) {
-            it->channels = AudioSystem::popCount((*channels) &
-                      (AudioSystem::CHANNEL_IN_STEREO |
-                       AudioSystem::CHANNEL_IN_MONO));
-            LOGD("channels %d", it->channels);
+        if (6 == it->channels) {
+            if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+                LOGV("OpenInoutStream: Use larger buffer size for 5.1(%s) recording ", it->useCase);
+                it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
+            }
         }
         err = mALSADevice->open(&(*it));
         if (err) {

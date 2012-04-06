@@ -115,6 +115,11 @@ status_t ALSAStreamOps::set(int      *format,
             }
         } else {
             switch(mHandle->channels) {
+                // For 5.1 recording
+                case 6 :
+                    *channels |= AudioSystem::CHANNEL_IN_5POINT1;
+                    break;
+                    // Do not fall through...
                 default:
                 case 2:
                     *channels |= AudioSystem::CHANNEL_IN_RIGHT;
@@ -272,6 +277,11 @@ uint32_t ALSAStreamOps::channels() const
         }
     else
         switch(count) {
+            // For 5.1 recording
+            case 6 :
+                channels |= AudioSystem::CHANNEL_IN_5POINT1;
+                break;
+                // Do not fall through...
             default:
             case 2:
                 channels |= AudioSystem::CHANNEL_IN_RIGHT;

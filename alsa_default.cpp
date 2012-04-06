@@ -195,17 +195,26 @@ status_t setHardwareParams(alsa_handle_t *handle)
     unsigned int periodTime, bufferTime;
     unsigned int requestedRate = handle->sampleRate;
     int status = 0;
+    int channels = handle->channels;
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
-		//SMANI:: Commented to fix build issues. FIX IT.
-        //LOG_ALWAYS_FATAL("Failed to allocate ALSA hardware parameters!");
+        LOGE("Failed to allocate ALSA hardware parameters!");
         return NO_INIT;
     }
 
     reqBuffSize = handle->bufferSize;
     LOGD("setHardwareParams: reqBuffSize %d channels %d sampleRate %d",
          (int) reqBuffSize, handle->channels, handle->sampleRate);
+
+    if (channels == 6) {
+        if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            LOGV("HWParams: Use 4 channels in kernel for 5.1(%s) recording ", handle->useCase);
+            channels = 4;
+            reqBuffSize = DEFAULT_IN_BUFFER_SIZE;
+        }
+    }
 
     param_init(params);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
@@ -217,9 +226,9 @@ status_t setHardwareParams(alsa_handle_t *handle)
     param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-                   handle->channels - 1 ? 32 : 16);
+                   channels * 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
-                  handle->channels);
+                  channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
     param_set_hw_refine(handle->handle, params);
 
@@ -238,7 +247,12 @@ status_t setHardwareParams(alsa_handle_t *handle)
     handle->handle->rate = handle->sampleRate;
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
-    handle->bufferSize = handle->handle->period_size;
+    if (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC) &&
+        strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC) &&
+        (6 != handle->channels)) {
+        //Do not update buffersize for 5.1 recording
+        handle->bufferSize = handle->handle->period_size;
+    }
     return NO_ERROR;
 }
 
@@ -248,11 +262,20 @@ status_t setSoftwareParams(alsa_handle_t *handle)
     struct pcm* pcm = handle->handle;
 
     unsigned long periodSize = pcm->period_size;
+    int channels = handle->channels;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
     if (!params) {
         LOG_ALWAYS_FATAL("Failed to allocate ALSA software parameters!");
         return NO_INIT;
+    }
+
+    if (channels == 6) {
+        if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            LOGV("SWParams: Use 4 channels in kernel for 5.1(%s) recording ", handle->useCase);
+            channels = 4;
+        }
     }
 
     // Get the current software parameters
@@ -266,7 +289,7 @@ status_t setSoftwareParams(alsa_handle_t *handle)
           params->stop_threshold = INT_MAX;
      } else {
          params->avail_min = periodSize/2;
-         params->start_threshold = handle->channels - 1 ? periodSize/2 : periodSize/4;
+         params->start_threshold = channels * (periodSize/4);
          params->stop_threshold = INT_MAX;
      }
     params->silence_threshold = 0;
@@ -324,6 +347,13 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
                   (devices & AudioSystem::DEVICE_IN_PROXY)) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
+        }
+    }
+    if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && ( 6 == handle->channels)) {
+        if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            LOGV(" switchDevice , use ssr devices for channels:%d usecase:%s",handle->channels,handle->useCase);
+            s_set_flags(SSRQMIC_FLAG);
         }
     }
 
@@ -525,6 +555,15 @@ static status_t s_open(alsa_handle_t *handle)
     }
     if (handle->channels == 1) {
         flags |= PCM_MONO;
+    } else if (handle->channels == 4 ) {
+        flags |= PCM_QUAD;
+    } else if (handle->channels == 6 ) {
+        if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            flags |= PCM_QUAD;
+        } else {
+            flags |= PCM_5POINT1;
+        }
     } else {
         flags |= PCM_STEREO;
     }
@@ -1208,6 +1247,10 @@ char *getUCMDevice(uint32_t devices, int input)
                     }
                 } else if (mDevSettingsFlag & QMIC_FLAG){
                     return strdup(SND_USE_CASE_DEV_QUAD_MIC);
+                } else if (mDevSettingsFlag & SSRQMIC_FLAG){
+                    LOGV("return SSRQMIC_FLAG: 0x%x devices:0x%x",mDevSettingsFlag,devices);
+                    // Mapping for quad mic input device.
+                    return strdup(SND_USE_CASE_DEV_SSR_QUAD_MIC); /* SSR Quad MIC */
                 } else {
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }

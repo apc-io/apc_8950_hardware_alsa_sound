@@ -83,6 +83,7 @@ class AudioHardwareALSA;
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
 #define QMIC_FLAG       0x00000004
+#define SSRQMIC_FLAG    0x00000008
 #define TTY_OFF         0x00000010
 #define TTY_FULL        0x00000020
 #define TTY_VCO         0x00000040
@@ -105,6 +106,12 @@ static int USBRECBIT_FM = (1 << 3);
 #define DEVICE_SPEAKER_HEADSET "Speaker Headset"
 #define DEVICE_HEADSET "Headset"
 #define DEVICE_HEADPHONES "Headphones"
+
+#define COEFF_ARRAY_SIZE          4
+#define FILT_SIZE                 ((512+1)* 6)    /* # ((FFT bins)/2+1)*numOutputs */
+#define SSR_FRAME_SIZE            512
+#define SSR_INPUT_FRAME_SIZE      (SSR_FRAME_SIZE * 4)
+#define SSR_OUTPUT_FRAME_SIZE     (SSR_FRAME_SIZE * 6)
 
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
@@ -349,12 +356,28 @@ public:
 
     status_t            open(int mode);
     status_t            close();
+    // Helper function to initialize the Surround Sound library.
+    status_t initSurroundSoundLibrary(unsigned long buffersize);
 
 private:
     void                resetFramesLost();
 
     unsigned int        mFramesLost;
     AudioSystem::audio_in_acoustics mAcoustics;
+
+    // Function to read coefficients from files.
+    status_t            readCoeffsFromFile();
+
+    FILE                *mFp_4ch;
+    FILE                *mFp_6ch;
+    int16_t             **mRealCoeffs;
+    int16_t             **mImagCoeffs;
+    void                *mSurroundObj;
+
+    int16_t             *mSurroundInputBuffer;
+    int16_t             *mSurroundOutputBuffer;
+    int                 mSurroundInputBufferIdx;
+    int                 mSurroundOutputBufferIdx;
 
 protected:
     AudioHardwareALSA *     mParent;
