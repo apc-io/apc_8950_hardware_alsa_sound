@@ -61,6 +61,8 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             // FALL THROUGH
 
         default:    // FORCE_NONE
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
+            if (device) break;
 #ifdef WITH_A2DP
             // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP
             if (!isInCall()) {
@@ -70,7 +72,11 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
                 if (device) break;
             }
 #endif
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET;
+            if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            if (device) break;
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
             if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE;
             if (device) break;
@@ -99,6 +105,10 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
                 if (device) break;
             }
 #endif
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET;
+            if (device) break;
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
+            if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
             if (device == 0) {
                 LOGE("getDeviceForStrategy() speaker device not found");
@@ -164,7 +174,13 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             }
     #endif
             if (device2 == 0) {
+                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET;
+            }
+            if (device2 == 0) {
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            }
+            if (device2 == 0) {
+                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
             }
             if (device2 == 0) {
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE;
@@ -371,6 +387,8 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT) {
             device = AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        } else if(device == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET){
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
         } else if(device == AudioSystem::DEVICE_OUT_ANC_HEADSET){
                device = AudioSystem::DEVICE_IN_ANC_HEADSET; //wait for actual ANC device
         } else {
@@ -1041,6 +1059,8 @@ uint32_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
             device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             device = AudioSystem::DEVICE_IN_ANC_HEADSET;
+        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+            device = AudioSystem::DEVICE_IN_PROXY;
         } else {
             device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
         }

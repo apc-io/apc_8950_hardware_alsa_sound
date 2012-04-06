@@ -320,9 +320,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
                       AudioSystem::DEVICE_IN_AUX_DIGITAL);
-        } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
+        } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) ||
+                  (devices & AudioSystem::DEVICE_IN_PROXY)) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
+                      AudioSystem::DEVICE_IN_PROXY);
         }
     }
 
@@ -1121,6 +1122,9 @@ char *getUCMDevice(uint32_t devices, int input)
              } else if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HANDSET_RX); /* HANDSET RX */
              }
+        }else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+                  (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
+             return strdup(SND_USE_CASE_DEV_PROXY_RX); /* PROXY RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
@@ -1218,6 +1222,9 @@ char *getUCMDevice(uint32_t devices, int input)
                  return strdup(SND_USE_CASE_DEV_BTSCO_WB_TX); /* BTSCO TX*/
              else
                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
+        } else if ((devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+                   (devices & AudioSystem::DEVICE_IN_PROXY)) {
+            return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */

@@ -146,7 +146,19 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         free(use_case);
         if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+            if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+                  (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
+                  (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
+                mDevices |= AudioSystem::DEVICE_OUT_PROXY;
+                mHandle->module->route(mHandle, mDevices , mParent->mode());
+            }else{
               mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
+            }
+        } else if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+                  (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
+                  (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
+            mDevices |= AudioSystem::DEVICE_OUT_PROXY;
+            mHandle->module->route(mHandle, mDevices , mParent->mode());
         } else {
               mHandle->module->route(mHandle, mDevices , mParent->mode());
         }
@@ -166,6 +178,33 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             LOGE("write:: device open failed");
             mParent->mLock.unlock();
             return 0;
+        }
+        if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
+               (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+            if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+            } else {
+                mParent->startUsbPlaybackIfNotStarted();
+                mParent->musbPlaybackState |= USBPLAYBACKBIT_MUSIC;
+            }
+        }
+        mParent->mLock.unlock();
+    }
+
+    if(((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+        (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) &&
+        (!mParent->musbPlaybackState)) {
+        mParent->mLock.lock();
+        mParent->startUsbPlaybackIfNotStarted();
+        LOGD("Starting playback on USB");
+        if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
+           !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+            LOGE("Setting VOIPCALL bit here, musbPlaybackState %d", mParent->musbPlaybackState);
+            mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+        }else{
+            LOGD("enabling music, musbPlaybackState: %d ", mParent->musbPlaybackState);
+            mParent->musbPlaybackState |= USBPLAYBACKBIT_MUSIC;
         }
         mParent->mLock.unlock();
     }
@@ -227,17 +266,31 @@ status_t AudioStreamOutALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
-
+    LOGD("close");
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
          if((mParent->mVoipStreamCount)) {
+             if(mParent->mVoipStreamCount == 1) {
+                 LOGD("Deregistering VOIP Call bit, musbPlaybackState:%d, musbRecordingState: %d",
+                       mParent->musbPlaybackState, mParent->musbRecordingState);
+                 mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIPCALL;
+                 mParent->musbRecordingState &= ~USBRECBIT_VOIPCALL;
+                 mParent->closeUsbPlaybackIfNothingActive();
+                 mParent->closeUsbRecordingIfNothingActive();
+             }
                 return NO_ERROR;
          }
          mParent->mVoipStreamCount = 0;
          mParent->mVoipMicMute = 0;
-     }
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+              (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else {
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
+    }
 
-    LOGD("close");
+    mParent->closeUsbPlaybackIfNothingActive();
+
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -252,14 +305,25 @@ status_t AudioStreamOutALSA::standby()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
-     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-         return NO_ERROR;
-     }
-
     LOGD("standby");
 
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+      (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+        return NO_ERROR;
+    }
+
+    if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+        (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+        LOGD("Deregistering LPA bit");
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else {
+        LOGD("Deregistering MUSIC bit, musbPlaybackState: %d", mParent->musbPlaybackState);
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
+    }
+
     mHandle->module->standby(mHandle);
+
+    mParent->closeUsbPlaybackIfNothingActive();
 
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");

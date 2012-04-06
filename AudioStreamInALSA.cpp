@@ -159,9 +159,19 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         free(use_case);
         if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
             (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+            if((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+               (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) {
+                mHandle->module->route(mHandle, (mDevices | AudioSystem::DEVICE_IN_PROXY) , AudioSystem::MODE_IN_COMMUNICATION);
+            }else{
                 mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
+            }
         } else {
+            if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
+               (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+                mHandle->module->route(mHandle, AudioSystem::DEVICE_IN_PROXY , mParent->mode());
+            } else {
                 mHandle->module->route(mHandle, mDevices , mParent->mode());
+            }
         }
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
@@ -185,6 +195,33 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             mParent->mLock.unlock();
 
             return 0;
+        }
+        if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
+           (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+            if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
+            } else {
+                mParent->startUsbRecordingIfNotStarted();
+                mParent->musbRecordingState |= USBRECBIT_REC;
+            }
+        }
+        mParent->mLock.unlock();
+    }
+
+    if(((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+       (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) &&
+       (!mParent->musbRecordingState)) {
+        mParent->mLock.lock();
+        LOGD("Starting UsbRecording thread");
+        mParent->startUsbRecordingIfNotStarted();
+        if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
+           !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+            LOGD("Enabling voip recording bit");
+            mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
+        }else{
+            LOGD("Enabling HiFi Recording bit");
+            mParent->musbRecordingState |= USBRECBIT_REC;
         }
         mParent->mLock.unlock();
     }
@@ -248,14 +285,27 @@ status_t AudioStreamInALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
+    LOGD("close");
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-
         if((mParent->mVoipStreamCount)) {
+            LOGD("musbRecordingState: %d, mVoipStreamCount:%d",mParent->musbRecordingState,
+                  mParent->mVoipStreamCount );
+            if(mParent->mVoipStreamCount == 1) {
+                LOGE("Deregistering VOIP Call bit, musbPlaybackState:%d,"
+                       "musbRecordingState:%d", mParent->musbPlaybackState, mParent->musbRecordingState);
+                mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIPCALL;
+                mParent->musbRecordingState &= ~USBRECBIT_VOIPCALL;
+                mParent->closeUsbRecordingIfNothingActive();
+                mParent->closeUsbPlaybackIfNothingActive();
+            }
                return NO_ERROR;
         }
         mParent->mVoipStreamCount = 0;
         mParent->mVoipMicMute = 0;
+    } else {
+        LOGD("Deregistering REC bit, musbRecordingState:%d", mParent->musbRecordingState);
+        mParent->musbRecordingState &= ~USBRECBIT_REC;
      }
 
     if (mParent->mFusion3Platform) {
@@ -266,6 +316,8 @@ status_t AudioStreamInALSA::close()
     }
 
     LOGD("close");
+    mParent->closeUsbRecordingIfNothingActive();
+
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -279,6 +331,8 @@ status_t AudioStreamInALSA::close()
 status_t AudioStreamInALSA::standby()
 {
     Mutex::Autolock autoLock(mParent->mLock);
+
+    LOGD("standby");
 
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
@@ -295,6 +349,10 @@ status_t AudioStreamInALSA::standby()
     }
 
     mHandle->module->standby(mHandle);
+
+    LOGD("Checking for musbRecordingState %d", mParent->musbRecordingState);
+    mParent->musbRecordingState &= ~USBRECBIT_REC;
+    mParent->closeUsbRecordingIfNothingActive();
 
     if (mPowerLock) {
         release_wake_lock ("AudioInLock");

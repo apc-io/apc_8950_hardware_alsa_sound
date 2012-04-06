@@ -27,6 +27,7 @@
 #include <system/audio.h>
 #include <hardware/audio.h>
 #include <utils/threads.h>
+#include <AudioUsbALSA.h>
 
 extern "C" {
    #include <sound/asound.h>
@@ -90,6 +91,16 @@ class AudioHardwareALSA;
 
 #define LPA_SESSION_ID 1
 #define TUNNEL_SESSION_ID 2
+static int USBPLAYBACKBIT_MUSIC = (1 << 0);
+static int USBPLAYBACKBIT_VOICECALL = (1 << 1);
+static int USBPLAYBACKBIT_VOIPCALL = (1 << 2);
+static int USBPLAYBACKBIT_FM = (1 << 3);
+static int USBPLAYBACKBIT_LPA = (1 << 4);
+
+static int USBRECBIT_REC = (1 << 0);
+static int USBRECBIT_VOICECALL = (1 << 1);
+static int USBRECBIT_VOIPCALL = (1 << 2);
+static int USBRECBIT_FM = (1 << 3);
 
 #define DEVICE_SPEAKER_HEADSET "Speaker Headset"
 #define DEVICE_HEADSET "Headset"
@@ -435,6 +446,14 @@ protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     void                doRouting(int device);
     void                handleFm(int device);
+    void                closeUSBPlayback();
+    void                closeUSBRecording();
+    void                closeUsbRecordingIfNothingActive();
+    void                closeUsbPlaybackIfNothingActive();
+    void                startUsbPlaybackIfNotStarted();
+    void                startUsbRecordingIfNotStarted();
+
+
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
@@ -442,6 +461,8 @@ protected:
     alsa_device_t *     mALSADevice;
 
     ALSAHandleList      mDeviceList;
+
+    AudioUsbALSA        *mAudioUsbALSA;
 
     Mutex                   mLock;
 
@@ -460,6 +481,9 @@ protected:
     int mIsFmActive;
     bool mBluetoothVGS;
     bool mFusion3Platform;
+
+    int musbPlaybackState;
+    int musbRecordingState;
 };
 
 // ----------------------------------------------------------------------------
