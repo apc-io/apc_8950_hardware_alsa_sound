@@ -30,7 +30,10 @@
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
-
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/poll.h>
+#include <sys/ioctl.h>
 #include <cutils/properties.h>
 #include <media/AudioRecord.h>
 #include <hardware_legacy/power.h>
@@ -63,6 +66,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false),mVoipBitRate(0)
+    ,mCallState(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -78,7 +82,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
         if (err == 0) {
             mALSADevice = (alsa_device_t *)device;
             mALSADevice->init(mALSADevice, mDeviceList);
-            mIsVoiceCallActive = 0;
+            mCSCallActive = 0;
+            mVolteCallActive = 0;
             mIsFmActive = 0;
             mDevSettingsFlag = 0;
             mAudioUsbALSA = new AudioUsbALSA();
@@ -184,12 +189,14 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     // So adjust the volume to get the correct volume index in driver
     vol = 100 - vol;
 
-    // ToDo: Send mixer command only when voice call is active
-    if(mALSADevice) {
+    if (mALSADevice) {
         if(newMode == AudioSystem::MODE_IN_COMMUNICATION) {
             mALSADevice->setVoipVolume(vol);
-        } else {
-            mALSADevice->setVoiceVolume(vol);
+        } else if (newMode == AudioSystem::MODE_IN_CALL){
+               if (mCSCallActive == AudioSystem::CS_ACTIVE)
+                   mALSADevice->setVoiceVolume(vol);
+               if (mVolteCallActive == AudioSystem::IMS_ACTIVE)
+                   mALSADevice->setVoLTEVolume(vol);
         }
     }
 
@@ -232,6 +239,12 @@ status_t AudioHardwareALSA::setMode(int mode)
         status = AudioHardwareBase::setMode(mode);
     }
 
+    if (mode == AudioSystem::MODE_IN_CALL) {
+        mCallState = AudioSystem::CS_ACTIVE;
+    }else if (mode == AudioSystem::MODE_NORMAL) {
+        mCallState = 0;
+    }
+
     return status;
 }
 
@@ -243,6 +256,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     status_t status = NO_ERROR;
     int device;
     int btRate;
+    int state;
     LOGD("setParameters() %s", keyValuePairs.string());
 
     key = String8(TTY_MODE_KEY);
@@ -363,6 +377,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+
     key = String8(AudioParameter::keyHandleFm);
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore if device is 0
@@ -383,7 +398,14 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
-
+    key = String8(MODE_CALL_KEY);
+    if (param.getInt(key,state) == NO_ERROR) {
+        if (mCallState != state) {
+            mCallState = state;
+            doRouting(0);
+        }
+        mCallState = state;
+    }
     if (param.size()) {
         status = BAD_VALUE;
     }
@@ -403,13 +425,13 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
     key = String8(FLUENCE_KEY);
     if (param.get(key, value) == NO_ERROR) {
-	if ((mDevSettingsFlag & QMIC_FLAG) &&
+    if ((mDevSettingsFlag & QMIC_FLAG) &&
                                (mDevSettingsFlag & ~DMIC_FLAG))
             value = String8("quadmic");
-	else if ((mDevSettingsFlag & DMIC_FLAG) &&
+    else if ((mDevSettingsFlag & DMIC_FLAG) &&
                                 (mDevSettingsFlag & ~QMIC_FLAG))
             value = String8("dualmic");
-	else if ((mDevSettingsFlag & ~DMIC_FLAG) &&
+    else if ((mDevSettingsFlag & ~DMIC_FLAG) &&
                                 (mDevSettingsFlag & ~QMIC_FLAG))
             value = String8("none");
         param.add(key, value);
@@ -481,6 +503,8 @@ void AudioHardwareALSA::doRouting(int device)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
+    bool isRouted = false;
+
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL) ||
         (device == AudioSystem::DEVICE_IN_FM_RX) ||
         (device == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
@@ -491,145 +515,84 @@ void AudioHardwareALSA::doRouting(int device)
     }
     if (device == 0)
         device = mCurDevice;
-    LOGV("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
-          device, newMode, mIsVoiceCallActive, mIsFmActive);
-    if((newMode == AudioSystem::MODE_IN_CALL) && (mIsVoiceCallActive == 0)) {
-        // Start voice call
-        unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
-        alsa_handle_t alsa_handle;
-        char *use_case;
-        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOICECALL, sizeof(alsa_handle.useCase));
-        } else {
-            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOICE, sizeof(alsa_handle.useCase));
-        }
-        free(use_case);
+    LOGV("doRouting: device %d newMode %d mCSCallActive %d mVolteCallActive %d"
+         "mIsFmActive %d", device, newMode, mCSCallActive, mVolteCallActive,
+         mIsFmActive);
 
-        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
-        bufferSize &= ~b;
-        alsa_handle.module = mALSADevice;
-        alsa_handle.bufferSize = bufferSize;
-        alsa_handle.devices = device;
-        alsa_handle.handle = 0;
-        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
-        alsa_handle.channels = VOICE_CHANNEL_MODE;
-        alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
-        alsa_handle.latency = VOICE_LATENCY;
-        alsa_handle.rxHandle = 0;
-        alsa_handle.ucMgr = mUcMgr;
-        mIsVoiceCallActive = 1;
-        mDeviceList.push_back(alsa_handle);
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        LOGV("Enabling voice call");
-        if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-           (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-            device |= AudioSystem::DEVICE_OUT_PROXY;
-            alsa_handle.devices = device;
-        }
-        mALSADevice->route(&(*it), (uint32_t)device, newMode);
-        if (!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) {
-            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOICECALL);
-        } else {
-            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOICE);
-        }
-        mALSADevice->startVoiceCall(&(*it));
-        if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-           (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-            startUsbRecordingIfNotStarted();
-            startUsbPlaybackIfNotStarted();
-            musbPlaybackState |= USBPLAYBACKBIT_VOICECALL;
-            musbRecordingState |= USBRECBIT_VOICECALL;
-        }
-    } else if(newMode == AudioSystem::MODE_NORMAL && mIsVoiceCallActive == 1) {
-        // End voice call
-        for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
-            if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
-                LOGV("Disabling voice call");
-                mALSADevice->close(&(*it));
+    isRouted = routeVoLTECall(device, newMode);
+    isRouted |= routeVoiceCall(device, newMode);
+
+    if(!isRouted) {
+        if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
+            !(device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
+            !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
+             (musbPlaybackState)){
+                //USB unplugged
+                device &= ~ AudioSystem::DEVICE_OUT_PROXY;
+                device &= ~ AudioSystem::DEVICE_IN_PROXY;
+                ALSAHandleList::iterator it = mDeviceList.end();
+                it--;
                 mALSADevice->route(&(*it), (uint32_t)device, newMode);
-                mDeviceList.erase(it);
-                break;
-            }
+                LOGE("USB UNPLUGGED, setting musbPlaybackState to 0");
+                musbPlaybackState = 0;
+                musbRecordingState = 0;
+                closeUSBRecording();
+                closeUSBPlayback();
+        } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+                  (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
+                    LOGE("Routing everything to prox now");
+                    ALSAHandleList::iterator it = mDeviceList.end();
+                    it--;
+                    mALSADevice->route(&(*it), AudioSystem::DEVICE_OUT_PROXY,
+                                       newMode);
+                    for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+                         if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+                            (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
+                                 LOGD("doRouting: LPA device switch to proxy");
+                                 startUsbPlaybackIfNotStarted();
+                                 musbPlaybackState |= USBPLAYBACKBIT_LPA;
+                                 break;
+                         } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
+                                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
+                                    LOGD("doRouting: VOICE device switch to proxy");
+                                    startUsbRecordingIfNotStarted();
+                                    startUsbPlaybackIfNotStarted();
+                                    musbPlaybackState |= USBPLAYBACKBIT_VOICECALL;
+                                    musbRecordingState |= USBPLAYBACKBIT_VOICECALL;
+                                    break;
+                        }else if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+                                 (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+                                    LOGD("doRouting: FM device switch to proxy");
+                                    startUsbPlaybackIfNotStarted();
+                                    musbPlaybackState |= USBPLAYBACKBIT_FM;
+                                    break;
+                         }
+                    }
+        } else if((((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+                  (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) &&
+                  (mCurDevice & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                  ((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+                  (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) ||
+                  (((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+                  (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))  &&
+                  (device & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                  ((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+                  (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)))) {
+                        for(ALSAHandleList::iterator it = mDeviceList.begin();
+                             it != mDeviceList.end(); ++it) {
+                             if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
+                                 strlen(SND_USE_CASE_VERB_HIFI))) ||
+                                 (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+                                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+                                     mALSADevice->route(&(*it),(uint32_t)device, newMode);
+                                     break;
+                              }
+                         }
+        } else {
+             ALSAHandleList::iterator it = mDeviceList.end();
+             it--;
+             mALSADevice->route(&(*it), (uint32_t)device, newMode);
         }
-        mIsVoiceCallActive = 0;
-        if(musbPlaybackState & USBPLAYBACKBIT_VOICECALL) {
-            LOGE("Voice call ended on USB");
-            musbPlaybackState &= ~USBPLAYBACKBIT_VOICECALL;
-            musbRecordingState &= ~USBRECBIT_VOICECALL;
-            closeUsbRecordingIfNothingActive();
-            closeUsbPlaybackIfNothingActive();
-        }
-    } else if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
-              !(device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
-              !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) && (musbPlaybackState)){
-        //USB unplugged
-        device &= ~ AudioSystem::DEVICE_OUT_PROXY;
-        device &= ~ AudioSystem::DEVICE_IN_PROXY;
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode);
-        LOGE("USB UNPLUGGED, setting musbPlaybackState to 0");
-        musbPlaybackState = 0;
-        musbRecordingState = 0;
-        closeUSBRecording();
-        closeUSBPlayback();
-     } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-               (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-        LOGE("Routing everything to prox now");
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        mALSADevice->route(&(*it), AudioSystem::DEVICE_OUT_PROXY, newMode);
-        for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
-            if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
-               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
-                LOGD("doRouting: LPA device switch to proxy");
-                startUsbPlaybackIfNotStarted();
-                musbPlaybackState |= USBPLAYBACKBIT_LPA;
-                break;
-            } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
-                LOGD("doRouting: VOICE device switch to proxy");
-                startUsbRecordingIfNotStarted();
-                startUsbPlaybackIfNotStarted();
-                musbPlaybackState |= USBPLAYBACKBIT_VOICECALL;
-                musbRecordingState |= USBPLAYBACKBIT_VOICECALL;
-                break;
-            }else if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
-               (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
-                LOGD("doRouting: FM device switch to proxy");
-                startUsbPlaybackIfNotStarted();
-                musbPlaybackState |= USBPLAYBACKBIT_FM;
-                break;
-            }
-        }
-    } else if((((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-              (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) &&
-              (mCurDevice & AudioSystem::DEVICE_OUT_SPEAKER) &&
-              ((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-              (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) ||
-              (((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-              (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))  &&
-              (device & AudioSystem::DEVICE_OUT_SPEAKER) &&
-              ((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-              (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)))) {
-              for(ALSAHandleList::iterator it = mDeviceList.begin();
-                  it != mDeviceList.end(); ++it) {
-                  if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
-                       strlen(SND_USE_CASE_VERB_HIFI))) ||
-                     (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
-                       strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
-                     mALSADevice->route(&(*it), (uint32_t)device, newMode);
-                     break;
-                  }
-             }
-     } else {
-        ALSAHandleList::iterator it = mDeviceList.end();
-        it--;
-        mALSADevice->route(&(*it), (uint32_t)device, newMode);
     }
     mCurDevice = device;
 }
@@ -1238,7 +1201,10 @@ status_t AudioHardwareALSA::setMicMute(bool state)
               mMicMute = state;
               LOGD("setMicMute: mMicMute %d", mMicMute);
               if(mALSADevice) {
-                 mALSADevice->setMicMute(state);
+                 if(mCSCallActive == AudioSystem::CS_ACTIVE)
+                    mALSADevice->setMicMute(state);
+                 if(mVolteCallActive == AudioSystem::IMS_ACTIVE)
+                    mALSADevice->setVoLTEMicMute(state);
               }
         }
     }
@@ -1356,4 +1322,199 @@ int newMode = mode();
         }
     }
 }
+
+void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, int device)
+{
+    for(ALSAHandleList::iterator it = mDeviceList.begin();
+         it != mDeviceList.end(); ++it) {
+        if((!strcmp(it->useCase, verb)) ||
+           (!strcmp(it->useCase, modifier))) {
+            LOGV("Disabling voice call");
+            mALSADevice->close(&(*it));
+            mALSADevice->route(&(*it), (uint32_t)device, mode);
+            mDeviceList.erase(it);
+            break;
+        }
+    }
+   if(musbPlaybackState & USBPLAYBACKBIT_VOICECALL) {
+          LOGE("Voice call ended on USB");
+          musbPlaybackState &= ~USBPLAYBACKBIT_VOICECALL;
+          musbRecordingState &= ~USBRECBIT_VOICECALL;
+          closeUsbRecordingIfNothingActive();
+          closeUsbPlaybackIfNothingActive();
+   }
+}
+void AudioHardwareALSA::enableVoiceCall(char* verb, char* modifier, int mode, int device)
+{
+// Start voice call
+unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
+alsa_handle_t alsa_handle;
+char *use_case;
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+    if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+        strlcpy(alsa_handle.useCase, verb, sizeof(alsa_handle.useCase));
+    } else {
+        strlcpy(alsa_handle.useCase, modifier, sizeof(alsa_handle.useCase));
+    }
+    free(use_case);
+
+    for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+    bufferSize &= ~b;
+    alsa_handle.module = mALSADevice;
+    alsa_handle.bufferSize = bufferSize;
+    alsa_handle.devices = device;
+    alsa_handle.handle = 0;
+    alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+    alsa_handle.channels = VOICE_CHANNEL_MODE;
+    alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
+    alsa_handle.latency = VOICE_LATENCY;
+    alsa_handle.rxHandle = 0;
+    alsa_handle.ucMgr = mUcMgr;
+    mDeviceList.push_back(alsa_handle);
+    ALSAHandleList::iterator it = mDeviceList.end();
+    it--;
+    if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+       (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
+        device |= AudioSystem::DEVICE_OUT_PROXY;
+        alsa_handle.devices = device;
+    }
+    mALSADevice->route(&(*it), (uint32_t)device, mode);
+    if (!strcmp(it->useCase, verb)) {
+        snd_use_case_set(mUcMgr, "_verb", verb);
+    } else {
+        snd_use_case_set(mUcMgr, "_enamod", modifier);
+    }
+    mALSADevice->startVoiceCall(&(*it));
+    if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+       (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
+       startUsbRecordingIfNotStarted();
+       startUsbPlaybackIfNotStarted();
+       musbPlaybackState |= USBPLAYBACKBIT_VOICECALL;
+       musbRecordingState |= USBRECBIT_VOICECALL;
+    }
+}
+
+bool AudioHardwareALSA::routeVoiceCall(int device, int newMode)
+{
+int csCallState = mCallState&0xF;
+ bool isRouted = false;
+ switch (csCallState) {
+    case AudioSystem::CS_INACTIVE:
+        if (mCSCallActive != AudioSystem::CS_INACTIVE) {
+            LOGD("doRouting: Disabling voice call");
+            disableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
+                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device);
+            isRouted = true;
+            mCSCallActive = AudioSystem::CS_INACTIVE;
+        }
+    break;
+    case AudioSystem::CS_ACTIVE:
+        if (mCSCallActive == AudioSystem::CS_INACTIVE) {
+            LOGD("doRouting: Enabling CS voice call ");
+            enableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
+                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device);
+            isRouted = true;
+            mCSCallActive = AudioSystem::CS_ACTIVE;
+        } else if (mCSCallActive == AudioSystem::CS_HOLD) {
+             LOGD("doRouting: Resume voice call from hold state");
+             ALSAHandleList::iterator vt_it;
+             for(vt_it = mDeviceList.begin();
+                 vt_it != mDeviceList.end(); ++vt_it) {
+                 if((!strncmp(vt_it->useCase, SND_USE_CASE_VERB_VOICECALL,
+                     strlen(SND_USE_CASE_VERB_VOICECALL))) ||
+                     (!strncmp(vt_it->useCase, SND_USE_CASE_MOD_PLAY_VOICE,
+                     strlen(SND_USE_CASE_MOD_PLAY_VOICE)))) {
+                     alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                     mCSCallActive = AudioSystem::CS_ACTIVE;
+                     if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,0)<0)
+                                   LOGE("VoLTE resume failed");
+                     break;
+                 }
+             }
+        }
+    break;
+    case AudioSystem::CS_HOLD:
+        if (mCSCallActive == AudioSystem::CS_ACTIVE) {
+            LOGD("doRouting: Voice call going to Hold");
+             ALSAHandleList::iterator vt_it;
+             for(vt_it = mDeviceList.begin();
+                 vt_it != mDeviceList.end(); ++vt_it) {
+                 if((!strncmp(vt_it->useCase, SND_USE_CASE_VERB_VOICECALL,
+                     strlen(SND_USE_CASE_VERB_VOICECALL))) ||
+                     (!strncmp(vt_it->useCase, SND_USE_CASE_MOD_PLAY_VOICE,
+                         strlen(SND_USE_CASE_MOD_PLAY_VOICE)))) {
+                         mCSCallActive = AudioSystem::CS_HOLD;
+                         alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                         if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,1)<0)
+                                   LOGE("Voice pause failed");
+                         break;
+                }
+            }
+        }
+    break;
+    }
+    return isRouted;
+}
+bool AudioHardwareALSA::routeVoLTECall(int device, int newMode)
+{
+int volteCallState = mCallState&0xF0;
+bool isRouted = false;
+switch (volteCallState) {
+    case AudioSystem::IMS_INACTIVE:
+        if (mVolteCallActive != AudioSystem::IMS_INACTIVE) {
+            LOGD("doRouting: Disabling IMS call");
+            disableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
+                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device);
+            isRouted = true;
+            mVolteCallActive = AudioSystem::IMS_INACTIVE;
+        }
+    break;
+    case AudioSystem::IMS_ACTIVE:
+        if (mVolteCallActive == AudioSystem::IMS_INACTIVE) {
+            LOGD("doRouting: Enabling IMS voice call ");
+            enableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
+                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device);
+            isRouted = true;
+            mVolteCallActive = AudioSystem::IMS_ACTIVE;
+        } else if (mVolteCallActive == AudioSystem::IMS_HOLD) {
+             LOGD("doRouting: Resume IMS call from hold state");
+             ALSAHandleList::iterator vt_it;
+             for(vt_it = mDeviceList.begin();
+                 vt_it != mDeviceList.end(); ++vt_it) {
+                 if((!strncmp(vt_it->useCase, SND_USE_CASE_VERB_VOLTE,
+                     strlen(SND_USE_CASE_VERB_VOLTE))) ||
+                     (!strncmp(vt_it->useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
+                     strlen(SND_USE_CASE_MOD_PLAY_VOLTE)))) {
+                     alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                     mVolteCallActive = AudioSystem::IMS_ACTIVE;
+                     if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,0)<0)
+                                   LOGE("VoLTE resume failed");
+                     break;
+                 }
+             }
+        }
+    break;
+    case AudioSystem::IMS_HOLD:
+        if (mVolteCallActive == AudioSystem::IMS_ACTIVE) {
+             LOGD("doRouting: IMS ACTIVE going to HOLD");
+             ALSAHandleList::iterator vt_it;
+             for(vt_it = mDeviceList.begin();
+                 vt_it != mDeviceList.end(); ++vt_it) {
+                 if((!strncmp(vt_it->useCase, SND_USE_CASE_VERB_VOLTE,
+                     strlen(SND_USE_CASE_VERB_VOLTE))) ||
+                     (!strncmp(vt_it->useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
+                         strlen(SND_USE_CASE_MOD_PLAY_VOLTE)))) {
+                          mVolteCallActive = AudioSystem::IMS_HOLD;
+                         alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                         if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,1)<0)
+                                   LOGE("VoLTE Pause failed");
+                    break;
+                }
+            }
+        }
+    break;
+    }
+    return isRouted;
+}
+
 }       // namespace android_audio_legacy

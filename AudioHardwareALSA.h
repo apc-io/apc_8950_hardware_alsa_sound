@@ -120,6 +120,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define SSR_FRAME_SIZE            512
 #define SSR_INPUT_FRAME_SIZE      (SSR_FRAME_SIZE * 4)
 #define SSR_OUTPUT_FRAME_SIZE     (SSR_FRAME_SIZE * 6)
+#define MODE_CALL_KEY  "CALL_KEY"
 
 struct alsa_device_t;
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
@@ -178,6 +179,8 @@ struct alsa_device_t {
     status_t (*setCompressedVolume)(int);
     void     (*enableSlowTalk)(bool);
     void     (*setVocRecMode)(uint8_t);
+    void     (*setVoLTEMicMute)(int);
+    void     (*setVoLTEVolume)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -485,7 +488,10 @@ protected:
     void                startUsbPlaybackIfNotStarted();
     void                startUsbRecordingIfNotStarted();
 
-
+    void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
+    void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
+    bool                routeVoiceCall(int device, int	newMode);
+    bool                routeVoLTECall(int device, int newMode);
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
@@ -510,7 +516,9 @@ protected:
     uint32_t            mIncallMode;
 
     bool                mMicMute;
-    int mIsVoiceCallActive;
+    int mCSCallActive;
+    int mVolteCallActive;
+    int mCallState;
     int mIsFmActive;
     bool mBluetoothVGS;
     bool mFusion3Platform;

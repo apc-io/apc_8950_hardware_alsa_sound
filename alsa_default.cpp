@@ -63,6 +63,8 @@ static void     s_set_flags(uint32_t flags);
 static status_t s_set_compressed_vol(int);
 static void     s_enable_slow_talk(bool flag);
 static void     s_set_voc_rec_mode(uint8_t mode);
+static void     s_set_volte_mic_mute(int state);
+static void     s_set_volte_volume(int vol);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -127,6 +129,8 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setCompressedVolume = s_set_compressed_vol;
     dev->enableSlowTalk = s_enable_slow_talk;
     dev->setVocRecMode = s_set_voc_rec_mode;
+    dev->setVoLTEMicMute = s_set_volte_mic_mute;
+    dev->setVoLTEVolume = s_set_volte_volume;
 
     *device = &dev->common;
 
@@ -1120,7 +1124,11 @@ int getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
             strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
-            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE))) {
+            strlen(SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
+            strlen(SND_USE_CASE_VERB_VOLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
+            strlen(SND_USE_CASE_MOD_PLAY_VOLTE))) {
         return (USECASE_TYPE_RX | USECASE_TYPE_TX);
     } else {
         LOGE("unknown use case %s\n", useCase);
@@ -1349,6 +1357,14 @@ void s_set_voice_volume(int vol)
     }
 }
 
+void s_set_volte_volume(int vol)
+{
+    LOGD("s_set_volte_volume: volume %d", vol);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("VoLTE Rx Volume", vol, 0);
+}
+
+
 void s_set_voip_volume(int vol)
 {
     LOGD("s_set_voip_volume: volume %d", vol);
@@ -1368,6 +1384,12 @@ void s_set_mic_mute(int state)
             LOGE("s_set_mic_mute: csd_client error %d", err);
         }
     }
+}
+void s_set_volte_mic_mute(int state)
+{
+    LOGD("s_set_volte_mic_mute: state %d", state);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("VoLTE Tx Mute", state, 0);
 }
 
 void s_set_voip_mic_mute(int state)
