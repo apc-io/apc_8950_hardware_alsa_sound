@@ -82,7 +82,7 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
         LOGW("AudioSessionOutALSA::setVolume(%f) over 1.0, assuming 1.0\n", volume);
         volume = 1.0;
     }
-    vol = lrint((volume * 100.0)+0.5);
+    vol = lrint((volume * 0x2000)+0.5);
 
     if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
        !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
