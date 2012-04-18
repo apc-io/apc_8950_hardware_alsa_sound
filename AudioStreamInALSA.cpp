@@ -222,6 +222,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         else {
             read += static_cast<ssize_t>((period_size));
             read_pending -= period_size;
+            buffer += period_size;
         }
 
     } while (mHandle->handle && read < bytes);
