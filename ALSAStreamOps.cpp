@@ -63,6 +63,7 @@ ALSAStreamOps::~ALSAStreamOps()
        }
        mParent->mVoipStreamCount = 0;
        mParent->mVoipMicMute = 0;
+       mParent->mVoipBitRate = 0;
     }
     close();
 
@@ -149,6 +150,14 @@ status_t ALSAStreamOps::set(int      *format,
                 iformat = SNDRV_PCM_FORMAT_S16_LE;
                 break;
 
+            case AudioSystem::AMR_NB:
+            case AudioSystem::AMR_WB:
+            case AudioSystem::EVRC:
+            case AudioSystem::EVRCB:
+            case AudioSystem::EVRCWB:
+                iformat = *format;
+                break;
+
             case AudioSystem::PCM_8_BIT:
                 iformat = SNDRV_PCM_FORMAT_S8;
                 break;
@@ -162,12 +171,13 @@ status_t ALSAStreamOps::set(int      *format,
             return BAD_VALUE;
 
         switch(iformat) {
-            default:
             case SNDRV_PCM_FORMAT_S16_LE:
                 *format = AudioSystem::PCM_16_BIT;
                 break;
             case SNDRV_PCM_FORMAT_S8:
                 *format = AudioSystem::PCM_8_BIT;
+                break;
+            default:
                 break;
         }
     }
@@ -213,7 +223,16 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
     if (param.get(key, value) == NO_ERROR) {
         param.addInt(key, (int)mDevices);
     }
-
+    else {
+        key = String8(AudioParameter::keyVoipCheck);
+        if (param.get(key, value) == NO_ERROR) {
+            if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+               (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP))))
+                param.addInt(key, true);
+            else
+                param.addInt(key, false);
+        }
+    }
     LOGV("getParameters() %s", param.toString().string());
     return param.toString();
 }
@@ -234,25 +253,33 @@ size_t ALSAStreamOps::bufferSize() const
 
 int ALSAStreamOps::format() const
 {
-    int pcmFormatBitWidth;
     int audioSystemFormat;
 
     snd_pcm_format_t ALSAFormat = mHandle->format;
 
-    pcmFormatBitWidth = 16; // snd_pcm_format_physical_width(ALSAFormat); TODO: change runtime detection
-    switch(pcmFormatBitWidth) {
-        case 8:
-            audioSystemFormat = AudioSystem::PCM_8_BIT;
+    switch(ALSAFormat) {
+        case SNDRV_PCM_FORMAT_S8:
+             audioSystemFormat = AudioSystem::PCM_8_BIT;
+             break;
+
+        case AudioSystem::AMR_NB:
+        case AudioSystem::AMR_WB:
+        case AudioSystem::EVRC:
+        case AudioSystem::EVRCB:
+        case AudioSystem::EVRCWB:
+            audioSystemFormat = mHandle->format;
+            break;
+        case SNDRV_PCM_FORMAT_S16_LE:
+            audioSystemFormat = AudioSystem::PCM_16_BIT;
             break;
 
         default:
-            LOG_FATAL("Unknown AudioSystem bit width %i!", pcmFormatBitWidth);
-
-        case 16:
+            LOG_FATAL("Unknown AudioSystem bit width %d!", audioSystemFormat);
             audioSystemFormat = AudioSystem::PCM_16_BIT;
             break;
     }
 
+    LOGD("ALSAFormat:0x%x,audioSystemFormat:0x%x",ALSAFormat,audioSystemFormat);
     return audioSystemFormat;
 }
 
@@ -300,6 +327,7 @@ void ALSAStreamOps::close()
     if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
        mParent->mVoipMicMute = false;
+       mParent->mVoipBitRate = 0;
        mParent->mVoipStreamCount = 0;
     }
     mParent->mALSADevice->close(mHandle);

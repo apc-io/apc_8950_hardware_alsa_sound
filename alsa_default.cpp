@@ -53,6 +53,7 @@ static void     s_set_voice_volume(int);
 static void     s_set_voip_volume(int);
 static void     s_set_mic_mute(int);
 static void     s_set_voip_mic_mute(int);
+static void     s_set_voip_config(int, int);
 static status_t s_set_fm_vol(int);
 static void     s_set_btsco_rate(int);
 static status_t s_set_lpa_vol(int);
@@ -116,6 +117,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setVoipVolume = s_set_voip_volume;
     dev->setMicMute = s_set_mic_mute;
     dev->setVoipMicMute = s_set_voip_mic_mute;
+    dev->setVoipConfig = s_set_voip_config;
     dev->setFmVolume = s_set_fm_vol;
     dev->setBtscoRate = s_set_btsco_rate;
     dev->setLpaVolume = s_set_lpa_vol;
@@ -197,6 +199,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
     unsigned int requestedRate = handle->sampleRate;
     int status = 0;
     int channels = handle->channels;
+    snd_pcm_format_t format = SNDRV_PCM_FORMAT_S16_LE;
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
@@ -220,8 +223,16 @@ status_t setHardwareParams(alsa_handle_t *handle)
     param_init(params);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
                    SNDRV_PCM_ACCESS_RW_INTERLEAVED);
+    if (handle->format != SNDRV_PCM_FORMAT_S16_LE) {
+        if (handle->format == AudioSystem::AMR_NB ||
+            handle->format == AudioSystem::AMR_WB ||
+            handle->format == AudioSystem::EVRC ||
+            handle->format == AudioSystem::EVRCB ||
+            handle->format == AudioSystem::EVRCWB)
+              format = SNDRV_PCM_FORMAT_SPECIAL;
+    }
     param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-                   SNDRV_PCM_FORMAT_S16_LE);
+                   format);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
@@ -1358,6 +1369,38 @@ void s_set_voip_mic_mute(int state)
     LOGD("s_set_voip_mic_mute: state %d", state);
     ALSAControl control("/dev/snd/controlC0");
     control.set("Voip Tx Mute", state, 0);
+}
+
+void s_set_voip_config(int mode, int rate)
+{
+    LOGD("s_set_voip_config: mode %d,rate %d", mode, rate);
+    ALSAControl control("/dev/snd/controlC0");
+    char** setValues;
+    setValues = (char**)malloc(2*sizeof(char*));
+    if (setValues == NULL) {
+          return;
+    }
+    setValues[0] = (char*)malloc(4*sizeof(char));
+    if (setValues[0] == NULL) {
+          free(setValues);
+          return;
+    }
+
+    setValues[1] = (char*)malloc(8*sizeof(char));
+    if (setValues[1] == NULL) {
+          free(setValues);
+          free(setValues[0]);
+          return;
+    }
+
+    sprintf(setValues[0], "%d",mode);
+    sprintf(setValues[1], "%d",rate);
+
+    control.setext("Voip Mode Rate Config", 2, setValues);
+    free(setValues[1]);
+    free(setValues[0]);
+    free(setValues);
+    return;
 }
 
 void s_set_btsco_rate(int rate)

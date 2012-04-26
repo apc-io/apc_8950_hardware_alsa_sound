@@ -62,7 +62,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 }
 
 AudioHardwareALSA::AudioHardwareALSA() :
-    mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false)
+    mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false),mVoipBitRate(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -341,6 +341,12 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if(mALSADevice) {
             mALSADevice->enableWideVoice(flag);
         }
+        param.remove(key);
+    }
+
+    key = String8(VOIPRATE_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+            mVoipBitRate = atoi(value);
         param.remove(key);
     }
 
@@ -626,6 +632,35 @@ void AudioHardwareALSA::doRouting(int device)
     mCurDevice = device;
 }
 
+uint32_t AudioHardwareALSA::getVoipMode(int format)
+{
+    switch(format) {
+    case AudioSystem::PCM_16_BIT:
+               return MODE_PCM;
+         break;
+    case AudioSystem::AMR_NB:
+               return MODE_AMR;
+         break;
+    case AudioSystem::AMR_WB:
+               return MODE_AMR_WB;
+         break;
+
+    case AudioSystem::EVRC:
+               return MODE_IS127;
+         break;
+
+    case AudioSystem::EVRCB:
+               return MODE_4GV_NB;
+         break;
+    case AudioSystem::EVRCWB:
+               return MODE_4GV_WB;
+         break;
+
+    default:
+               return MODE_PCM;
+    }
+}
+
 AudioStreamOut *
 AudioHardwareALSA::openOutputStream(uint32_t devices,
                                     int *format,
@@ -680,12 +715,16 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           alsa_handle.bufferSize = bufferSize;
           alsa_handle.devices = devices;
           alsa_handle.handle = 0;
-          alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+          if(*format == AudioSystem::PCM_16_BIT)
+              alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+          else
+              alsa_handle.format = *format;
           alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
           alsa_handle.sampleRate = *sampleRate;
           alsa_handle.latency = VOIP_PLAYBACK_LATENCY;
           alsa_handle.rxHandle = 0;
           alsa_handle.ucMgr = mUcMgr;
+          mALSADevice->setVoipConfig(getVoipMode(*format), mVoipBitRate);
           char *use_case;
           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
           if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -940,12 +979,16 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            alsa_handle.bufferSize = bufferSize;
            alsa_handle.devices = devices;
            alsa_handle.handle = 0;
-           alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+          if(*format == AudioSystem::PCM_16_BIT)
+              alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+          else
+              alsa_handle.format = *format;
            alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
            alsa_handle.sampleRate = *sampleRate;
            alsa_handle.latency = VOIP_RECORD_LATENCY;
            alsa_handle.rxHandle = 0;
            alsa_handle.ucMgr = mUcMgr;
+          mALSADevice->setVoipConfig(getVoipMode(*format), mVoipBitRate);
            snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
            if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
@@ -1219,7 +1262,12 @@ status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
 size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
 {
     size_t bufferSize;
-    if (format != AudioSystem::PCM_16_BIT) {
+    if (format != AudioSystem::PCM_16_BIT
+        && format != AudioSystem::AMR_NB
+        && format != AudioSystem::AMR_WB
+        && format != AudioSystem::EVRC
+        && format != AudioSystem::EVRCB
+        && format != AudioSystem::EVRCWB) {
          LOGW("getInputBufferSize bad format: %d", format);
          return 0;
     }

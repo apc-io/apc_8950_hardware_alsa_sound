@@ -69,6 +69,13 @@ class AudioHardwareALSA;
 #define VOIP_PLAYBACK_LATENCY      6400
 #define VOIP_RECORD_LATENCY        6400
 
+#define MODE_IS127              0x2
+#define MODE_4GV_NB             0x3
+#define MODE_4GV_WB             0x4
+#define MODE_AMR                0x5
+#define MODE_AMR_WB             0xD
+#define MODE_PCM                0xC
+
 #define DUALMIC_KEY         "dualmic_enabled"
 #define FLUENCE_KEY         "fluence"
 #define ANC_KEY             "anc_enabled"
@@ -76,6 +83,7 @@ class AudioHardwareALSA;
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
 #define BTHEADSET_VGS       "bt_headset_vgs"
 #define WIDEVOICE_KEY       "wide_voice_enable"
+#define VOIPRATE_KEY        "voip_rate"
 #define FENS_KEY            "fens_enable"
 #define ST_KEY              "st_enable"
 #define INCALLMUSIC_KEY     "incall_music_enabled"
@@ -160,6 +168,7 @@ struct alsa_device_t {
     void     (*setVoipVolume)(int);
     void     (*setMicMute)(int);
     void     (*setVoipMicMute)(int);
+    void     (*setVoipConfig)(int, int);
     status_t (*setFmVolume)(int);
     void     (*setBtscoRate)(int);
     status_t (*setLpaVolume)(int);
@@ -202,6 +211,7 @@ public:
     status_t                get(const char *name, unsigned int &value, int index = 0);
     status_t                set(const char *name, unsigned int value, int index = -1);
     status_t                set(const char *name, const char *);
+    status_t                setext(const char *name, int count, char **setValues);
 
 private:
     struct mixer*             mHandle;
@@ -467,6 +477,7 @@ public:
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
+    virtual uint32_t    getVoipMode(int format);
     void                doRouting(int device);
     void                handleFm(int device);
     void                closeUSBPlayback();
@@ -497,6 +508,7 @@ protected:
     uint32_t            mDevSettingsFlag;
     uint32_t            mVoipStreamCount;
     bool                mVoipMicMute;
+    uint32_t            mVoipBitRate;
     uint32_t            mIncallMode;
 
     bool                mMicMute;
