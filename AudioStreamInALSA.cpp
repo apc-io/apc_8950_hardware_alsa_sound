@@ -53,8 +53,8 @@ namespace android_audio_legacy
 #define SURROUND_FILE_3I "/system/etc/surround_sound/filter3i.pcm"
 #define SURROUND_FILE_4I "/system/etc/surround_sound/filter4i.pcm"
 
-// For SSR, output channels in this order: L, R, C, Ls, Rs, LFE
-const int chanMap[] = { 0, 1, 4, 3, 2, 5 };
+// Use AAC/DTS channel mapping as default channel mapping: C,FL,FR,Ls,Rs,LFE
+const int chanMap[] = { 1, 2, 4, 3, 0, 5 };
 
 AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
         alsa_handle_t *handle,
