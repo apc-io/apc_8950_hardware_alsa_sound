@@ -146,6 +146,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
 static int s_device_close(hw_device_t* device)
 {
     free(device);
+    device = NULL;
     return 0;
 }
 
@@ -451,12 +452,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
         if (devices & AudioSystem::DEVICE_OUT_FM)
             s_set_fm_vol(fmVolume);
-        free(rxDevice);
     }
     if (txDevice != NULL) {
        snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
        strlcpy(curTxUCMDevice, txDevice, sizeof(curTxUCMDevice));
-       free(txDevice);
     }
     for(ALSAUseCaseList::iterator it = mUseCaseList.begin(); it != mUseCaseList.end(); ++it) {
         LOGD("Route use case %s\n", it->useCase);
@@ -469,8 +468,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     }
     if (!mUseCaseList.empty())
         mUseCaseList.clear();
-    if (use_case != NULL)
+    if (use_case != NULL) {
         free(use_case);
+        use_case = NULL;
+    }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 
     if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
@@ -510,6 +511,15 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             s_open(handle);
             pflag = false;
         }
+    }
+
+    if (rxDevice != NULL) {
+        free(rxDevice);
+        rxDevice = NULL;
+    }
+    if (txDevice != NULL) {
+        free(txDevice);
+        txDevice = NULL;
     }
 }
 
