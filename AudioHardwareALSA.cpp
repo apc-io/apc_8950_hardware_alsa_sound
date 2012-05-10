@@ -647,7 +647,8 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         return out;
     }
 
-    if(devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) {
+    if((devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) &&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
@@ -907,7 +908,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
     }
 
-    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) )  {
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) &&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
@@ -965,7 +967,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
               LOGD("Starting recording in openoutputstream, musbRecordingState: %d", musbRecordingState);
               startUsbRecordingIfNotStarted();
               musbRecordingState |= USBRECBIT_VOIPCALL;
-           }else{
+           }else {
                mALSADevice->route(&(*it),mCurDevice, AudioSystem::MODE_IN_COMMUNICATION);
            }
            if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
