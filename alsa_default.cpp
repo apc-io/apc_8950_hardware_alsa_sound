@@ -1306,12 +1306,18 @@ char *getUCMDevice(uint32_t devices, int input)
                 }
             }
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
-                   (devices & AudioSystem::DEVICE_IN_FM_RX) ||
-                   (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
             if (strncmp(curTxUCMDevice, "None", 4)) {
                 return strdup(curTxUCMDevice);
+            }
+        } else if ((devices & AudioSystem::DEVICE_IN_FM_RX) ||
+                   (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP)) {
+            /* Nothing to be done, use current tx device or set dummy device */
+            if (strncmp(curTxUCMDevice, "None", 4)) {
+                return strdup(curTxUCMDevice);
+            } else {
+                return strdup(SND_USE_CASE_DEV_DUMMY_TX);
             }
         } else if ((devices & AudioSystem::DEVICE_IN_AMBIENT) ||
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC)) {
