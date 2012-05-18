@@ -545,7 +545,7 @@ static status_t s_init(alsa_device_t *module, ALSAHandleList &list)
 
 static status_t s_open(alsa_handle_t *handle)
 {
-    char *devName;
+    char *devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
 
@@ -597,9 +597,12 @@ static status_t s_open(alsa_handle_t *handle)
         return NO_INIT;
     }
 
-    if (!handle->handle) {
+    if (!handle->handle || (handle->handle->fd < 0)) {
         LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
-        free(devName);
+        if (devName) {
+           free(devName);
+           devName = NULL;
+        }
         return NO_INIT;
     }
 
@@ -615,15 +618,17 @@ static status_t s_open(alsa_handle_t *handle)
         s_standby(handle);
     }
 
-    free(devName);
+    if (devName) {
+       free(devName);
+       devName = NULL;
+    }
     return NO_ERROR;
 }
 
 static status_t s_start_voip_call(alsa_handle_t *handle)
 {
 
-    char* devName;
-    char* devName1;
+    char* devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
     uint8_t voc_pkt[VOIP_BUFFER_MAX_SIZE];
@@ -645,9 +650,12 @@ static status_t s_start_voip_call(alsa_handle_t *handle)
          return NO_INIT;
     }
 
-     if (!handle->handle) {
-          free(devName);
+     if (!handle->handle || (handle->handle->fd < 0)) {
           LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+          if (devName) {
+             free(devName);
+             devName = NULL;
+          }
           return NO_INIT;
      }
 
@@ -671,26 +679,35 @@ static status_t s_start_voip_call(alsa_handle_t *handle)
      memset(&voc_pkt,0,sizeof(voc_pkt));
      pcm_write(handle->handle,&voc_pkt,handle->handle->period_size);
      handle->rxHandle = handle->handle;
-     free(devName);
+
+     if (devName) {
+        free(devName);
+        devName = NULL;
+     }
+
      LOGV("s_open: DEVICE_IN_COMMUNICATION ");
      flags = PCM_IN;
      flags |= PCM_MONO;
      handle->handle = 0;
 
-     if (deviceName(handle, flags, &devName1) < 0) {
+     if (deviceName(handle, flags, &devName) < 0) {
         LOGE("Failed to get pcm device node");
         return NO_INIT;
      }
-    if (devName != NULL) {
-        handle->handle = pcm_open(flags, (char*)devName1);
-    } else {
+
+     if (devName != NULL) {
+        handle->handle = pcm_open(flags, (char*)devName);
+     } else {
          LOGE("Failed to get pcm device node");
          return NO_INIT;
-    }
+     }
 
-     if (!handle->handle) {
-         free(devName);
+     if (!handle->handle || (handle->handle->fd < 0)) {
          LOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+         if (devName) {
+            free(devName);
+            devName = NULL;
+         }
          return NO_INIT;
      }
 
@@ -715,12 +732,17 @@ static status_t s_start_voip_call(alsa_handle_t *handle)
      /* first read required start dsp */
      memset(&voc_pkt,0,sizeof(voc_pkt));
      pcm_read(handle->handle,&voc_pkt,handle->handle->period_size);
+
+     if (devName) {
+        free(devName);
+        devName = NULL;
+     }
      return NO_ERROR;
 }
 
 static status_t s_start_voice_call(alsa_handle_t *handle)
 {
-    char* devName;
+    char* devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
 
@@ -733,13 +755,15 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         LOGE("Failed to get pcm device node");
         return NO_INIT;
     }
+
     if (devName != NULL) {
         handle->handle = pcm_open(flags, (char*)devName);
     } else {
          LOGE("Failed to get pcm device node");
          return NO_INIT;
     }
-    if (!handle->handle) {
+
+    if (!handle->handle || (handle->handle->fd < 0)) {
         LOGE("s_start_voicecall: could not open PCM device");
         goto Error;
     }
@@ -770,7 +794,11 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
 
     // Store the PCM playback device pointer in rxHandle
     handle->rxHandle = handle->handle;
-    free(devName);
+
+    if (devName) {
+       free(devName);
+       devName = NULL;
+    }
 
     // Open PCM capture device
     flags = PCM_IN | PCM_MONO;
@@ -778,14 +806,15 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         LOGE("Failed to get pcm device node");
         goto Error;
     }
+
     if (devName != NULL) {
         handle->handle = pcm_open(flags, (char*)devName);
     } else {
          LOGE("Failed to get pcm device node");
          return NO_INIT;
     }
-    if (!handle->handle) {
-        free(devName);
+
+    if (!handle->handle || (handle->handle->fd < 0)) {
         goto Error;
     }
 
@@ -821,19 +850,26 @@ static status_t s_start_voice_call(alsa_handle_t *handle)
         }
     }
 
-    free(devName);
+    if (devName) {
+       free(devName);
+       devName = NULL;
+    }
     return NO_ERROR;
 
 Error:
     LOGE("s_start_voice_call: Failed to initialize ALSA device '%s'", devName);
-    free(devName);
+
+    if (devName) {
+       free(devName);
+       devName = NULL;
+    }
     s_close(handle);
     return NO_INIT;
 }
 
 static status_t s_start_fm(alsa_handle_t *handle)
 {
-    char *devName;
+    char *devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
 
@@ -847,13 +883,15 @@ static status_t s_start_fm(alsa_handle_t *handle)
         LOGE("Failed to get pcm device node");
         goto Error;
     }
+
     if (devName != NULL) {
         handle->handle = pcm_open(flags, (char*)devName);
     } else {
          LOGE("Failed to get pcm device node");
          return NO_INIT;
     }
-    if (!handle->handle) {
+
+    if (!handle->handle || (handle->handle->fd < 0)) {
         LOGE("s_start_fm: could not open PCM device");
         goto Error;
     }
@@ -884,7 +922,11 @@ static status_t s_start_fm(alsa_handle_t *handle)
 
     // Store the PCM playback device pointer in rxHandle
     handle->rxHandle = handle->handle;
-    free(devName);
+
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
 
     // Open PCM capture device
     flags = PCM_IN | PCM_STEREO;
@@ -892,13 +934,15 @@ static status_t s_start_fm(alsa_handle_t *handle)
         LOGE("Failed to get pcm device node");
         goto Error;
     }
+
     if (devName != NULL) {
         handle->handle = pcm_open(flags, (char*)devName);
     } else {
          LOGE("Failed to get pcm device node");
          return NO_INIT;
     }
-    if (!handle->handle) {
+
+    if (!handle->handle || (handle->handle->fd < 0)) {
         goto Error;
     }
 
@@ -927,11 +971,17 @@ static status_t s_start_fm(alsa_handle_t *handle)
     }
 
     s_set_fm_vol(fmVolume);
-    free(devName);
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
     return NO_ERROR;
 
 Error:
-    free(devName);
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
     s_close(handle);
     return NO_INIT;
 }
