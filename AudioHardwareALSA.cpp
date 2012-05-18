@@ -85,6 +85,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mDevSettingsFlag |= TTY_OFF;
             mBluetoothVGS = false;
             mFusion3Platform = false;
+            musbPlaybackState = 0;
+            musbRecordingState = 0;
 
             if((fp = fopen("/proc/asound/cards","r")) == NULL) {
                 LOGE("Cannot open /proc/asound/cards file to get sound card info");
