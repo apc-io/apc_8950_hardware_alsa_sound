@@ -117,11 +117,6 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 
     LOGV("read:: buffer %p, bytes %d", buffer, bytes);
 
-    if (!mPowerLock) {
-        acquire_wake_lock (PARTIAL_WAKE_LOCK, "AudioInLock");
-        mPowerLock = true;
-    }
-
     int n;
     status_t          err;
     size_t            read = 0;
@@ -460,11 +455,6 @@ status_t AudioStreamInALSA::close()
 
     ALSAStreamOps::close();
 
-    if (mPowerLock) {
-        release_wake_lock ("AudioInLock");
-        mPowerLock = false;
-    }
-
     if (mSurroundObj) {
         surround_filters_release(mSurroundObj);
         if (mSurroundObj)
@@ -532,11 +522,6 @@ status_t AudioStreamInALSA::standby()
     LOGD("Checking for musbRecordingState %d", mParent->musbRecordingState);
     mParent->musbRecordingState &= ~USBRECBIT_REC;
     mParent->closeUsbRecordingIfNothingActive();
-
-    if (mPowerLock) {
-        release_wake_lock ("AudioInLock");
-        mPowerLock = false;
-    }
 
     return NO_ERROR;
 }

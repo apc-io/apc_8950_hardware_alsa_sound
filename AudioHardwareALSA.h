@@ -242,8 +242,6 @@ protected:
     AudioHardwareALSA *     mParent;
     alsa_handle_t *         mHandle;
     uint32_t                mDevices;
-
-    bool                    mPowerLock;
 };
 
 // ----------------------------------------------------------------------------

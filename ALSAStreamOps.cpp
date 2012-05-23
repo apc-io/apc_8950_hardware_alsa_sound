@@ -43,8 +43,7 @@ namespace android_audio_legacy
 
 ALSAStreamOps::ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle) :
     mParent(parent),
-    mHandle(handle),
-    mPowerLock(false)
+    mHandle(handle)
 {
 }
 
