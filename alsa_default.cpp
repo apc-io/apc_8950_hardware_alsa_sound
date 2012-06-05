@@ -1272,8 +1272,9 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
                     if (((rxDevice != NULL) &&
                         !strncmp(rxDevice, SND_USE_CASE_DEV_SPEAKER,
                         (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) ||
+                        ((rxDevice == NULL) &&
                         !strncmp(curRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
-                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) {
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
                         if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                             return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
                         } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
