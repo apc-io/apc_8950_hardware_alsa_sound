@@ -181,6 +181,8 @@ struct alsa_device_t {
     void     (*setVocRecMode)(uint8_t);
     void     (*setVoLTEMicMute)(int);
     void     (*setVoLTEVolume)(int);
+    void     (*setSGLTEMicMute)(int);
+    void     (*setSGLTEVolume)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -492,6 +494,7 @@ protected:
     void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
     bool                routeVoiceCall(int device, int	newMode);
     bool                routeVoLTECall(int device, int newMode);
+    bool                routeSGLTECall(int device, int newMode);
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
@@ -518,6 +521,7 @@ protected:
     bool                mMicMute;
     int mCSCallActive;
     int mVolteCallActive;
+    int mSGLTECallActive;
     int mCallState;
     int mIsFmActive;
     bool mBluetoothVGS;
