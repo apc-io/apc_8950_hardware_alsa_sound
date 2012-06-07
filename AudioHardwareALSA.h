@@ -183,6 +183,7 @@ struct alsa_device_t {
     void     (*setVoLTEVolume)(int);
     void     (*setSGLTEMicMute)(int);
     void     (*setSGLTEVolume)(int);
+    void     (*setInChannels)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -489,6 +490,7 @@ protected:
     void                closeUsbPlaybackIfNothingActive();
     void                startUsbPlaybackIfNotStarted();
     void                startUsbRecordingIfNotStarted();
+    void                setInChannels(int device);
 
     void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
     void                enableVoiceCall(char* verb, char* modifier, int mode, int device);

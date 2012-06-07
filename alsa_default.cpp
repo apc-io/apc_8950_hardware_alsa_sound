@@ -26,6 +26,7 @@
 #include <media/AudioRecord.h>
 extern "C" {
 #include "csd_client.h"
+#include "acdb-loader.h"
 }
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
@@ -67,6 +68,8 @@ static void     s_set_volte_mic_mute(int state);
 static void     s_set_volte_volume(int vol);
 static void     s_set_sglte_mic_mute(int);
 static void     s_set_sglte_volume(int);
+static status_t s_set_ecrx_device(char *device);
+static void     s_set_input_channels(int channels);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -77,6 +80,7 @@ static uint32_t mDevSettingsFlag = TTY_OFF;
 static int btsco_samplerate = 8000;
 static bool pflag = false;
 static ALSAUseCaseList mUseCaseList;
+static int nInChannels = 0;
 
 static hw_module_methods_t s_module_methods = {
     open            : s_device_open
@@ -135,6 +139,7 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setVoLTEVolume = s_set_volte_volume;
     dev->setSGLTEMicMute = s_set_sglte_mic_mute;
     dev->setSGLTEVolume = s_set_sglte_volume;
+    dev->setInChannels = s_set_input_channels;
 
     *device = &dev->common;
 
@@ -166,6 +171,7 @@ static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
 static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
 static char *getUCMDevice(uint32_t devices, int input, char *rxDevice);
+static char *getUCMDeviceFromAcdbId(int acdb_id);
 static void disableDevice(alsa_handle_t *handle);
 int getUseCaseType(const char *useCase);
 
@@ -494,6 +500,30 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             s_set_fm_vol(fmVolume);
     }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
+
+    if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && (nInChannels == 1)) {
+        LOGD(" switchDevice:use device BUITIN_MIC for channels:%d usecase:%s",handle->channels,handle->useCase);
+        int ec_acdbid;
+        char *ec_dev;
+        char *ec_rx_dev;
+        memset(&ident,0,sizeof(ident));
+        strlcpy(ident, "ACDBID/", sizeof(ident));
+        strlcat(ident, curTxUCMDevice, sizeof(ident));
+        tx_dev_id = snd_use_case_get(handle->ucMgr, ident, NULL);
+        ec_acdbid = acdb_loader_get_ecrx_device(tx_dev_id);
+        ec_dev = getUCMDeviceFromAcdbId(ec_acdbid);
+        if (ec_dev) {
+            memset(&ident,0,sizeof(ident));
+            strlcpy(ident, "EC_REF_RXMixerCTL/", sizeof(ident));
+            strlcat(ident, ec_dev, sizeof(ident));
+            snd_use_case_get(handle->ucMgr, ident, (const char **)&ec_rx_dev);
+            LOGD("SwitchDevice: ec_ref_rx_acdbid:%d ec_dev:%s ec_rx_dev:%s", ec_acdbid, ec_dev, ec_rx_dev);
+            if (ec_rx_dev) {
+                s_set_ecrx_device(ec_rx_dev);
+                free(ec_rx_dev);
+            }
+         }
+    }
 
     if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
         /* get tx acdb id */
@@ -1228,6 +1258,24 @@ static void disableDevice(alsa_handle_t *handle)
     free(useCase);
 }
 
+char *getUCMDeviceFromAcdbId(int acdb_id)
+{
+     switch(acdb_id) {
+        case DEVICE_HANDSET_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_HANDSET);
+        case DEVICE_SPEAKER_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_SPEAKER);
+        case DEVICE_HEADSET_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_HEADPHONES);
+        case DEVICE_TTY_HEADSET_MONO_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
+        case DEVICE_ANC_HEADSET_STEREO_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_ANC_HEADSET);
+        default:
+             return NULL;
+     }
+}
+
 char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
 {
     if (!input) {
@@ -1322,7 +1370,7 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-                if (mDevSettingsFlag & DMIC_FLAG) {
+                if ((mDevSettingsFlag & DMIC_FLAG) && (nInChannels == 1)) {
                     if (((rxDevice != NULL) &&
                         !strncmp(rxDevice, SND_USE_CASE_DEV_SPEAKER,
                         (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) ||
@@ -1332,18 +1380,31 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
                         if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                             return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
                         } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
-                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                                   return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                         }
                     } else {
                         if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
                             return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
                         } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
-                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                                   return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                         }
                     }
-                } else if (mDevSettingsFlag & QMIC_FLAG){
+                } else if ((mDevSettingsFlag & DMIC_FLAG) && (nInChannels > 1)) {
+                    if (((rxDevice != NULL) &&
+                        !strncmp(rxDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) ||
+                        ((rxDevice == NULL) &&
+                        !strncmp(curRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
+                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_STEREO); /* DUALMIC EF TX */
+                    } else {
+                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_HANDSET_STEREO); /* DUALMIC EF TX */
+                    }
+                } else if ((mDevSettingsFlag & QMIC_FLAG) && (nInChannels == 1)){
                     return strdup(SND_USE_CASE_DEV_QUAD_MIC);
-                } else if (mDevSettingsFlag & SSRQMIC_FLAG){
+                } else if ((mDevSettingsFlag & QMIC_FLAG) && (nInChannels > 1)){
+                    return strdup(SND_USE_CASE_DEV_SSR_QUAD_MIC);
+                } else if ((mDevSettingsFlag & SSRQMIC_FLAG) && (nInChannels > 1)){
                     LOGV("return SSRQMIC_FLAG: 0x%x devices:0x%x",mDevSettingsFlag,devices);
                     // Mapping for quad mic input device.
                     return strdup(SND_USE_CASE_DEV_SSR_QUAD_MIC); /* SSR Quad MIC */
@@ -1597,6 +1658,22 @@ static status_t s_set_compressed_vol(int value)
     control.set("COMPRESSED RX Volume",value,0);
 
     return err;
+}
+
+static status_t s_set_ecrx_device(char *device)
+{
+    status_t err = NO_ERROR;
+
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("EC_REF_RX", device);
+
+    return err;
+}
+
+void s_set_input_channels(int channels)
+{
+    nInChannels = channels;
+    LOGV("nInChannels:%d", nInChannels);
 }
 
 }

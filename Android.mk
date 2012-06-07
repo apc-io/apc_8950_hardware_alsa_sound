@@ -106,12 +106,15 @@ LOCAL_C_INCLUDES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-qmi/csd-client
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-acdb-util
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
 
 LOCAL_SRC_FILES:= \
     alsa_default.cpp \
     ALSAControl.cpp
 
 LOCAL_SHARED_LIBRARIES := \
+    libacdbloader \
     libcutils \
     liblog    \
     libalsa-intf \

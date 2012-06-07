@@ -599,12 +599,33 @@ void AudioHardwareALSA::doRouting(int device)
                               }
                          }
         } else {
+             setInChannels(device);
              ALSAHandleList::iterator it = mDeviceList.end();
              it--;
              mALSADevice->route(&(*it), (uint32_t)device, newMode);
         }
     }
     mCurDevice = device;
+}
+
+void AudioHardwareALSA::setInChannels(int device)
+{
+     ALSAHandleList::iterator it;
+
+     if (device & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+         for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+             if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC,
+                 strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
+                 !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+                 strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+                 mALSADevice->setInChannels(it->channels);
+                 return;
+             }
+         }
+     }
+
+     if (it == mDeviceList.end())
+         mALSADevice->setInChannels(1);
 }
 
 uint32_t AudioHardwareALSA::getVoipMode(int format)
@@ -996,8 +1017,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            if(sampleRate) {
                it->sampleRate = *sampleRate;
            }
-           if(channels)
+           if(channels) {
                it->channels = AudioSystem::popCount(*channels);
+               setInChannels(devices);
+           }
            err = mALSADevice->startVoipCall(&(*it));
            if (err) {
                LOGE("Error opening pcm input device");
@@ -1134,6 +1157,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                        AudioSystem::CHANNEL_IN_MONO |
                        AudioSystem::CHANNEL_IN_5POINT1));
             LOGV("updated channel info: channels=%d", it->channels);
+            setInChannels(devices);
         }
         if (devices == AudioSystem::DEVICE_IN_VOICE_CALL){
            /* Add current devices info to devices to do route */
@@ -1390,6 +1414,9 @@ char *use_case;
         device |= AudioSystem::DEVICE_OUT_PROXY;
         alsa_handle.devices = device;
     }
+
+    setInChannels(device);
+
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
         snd_use_case_set(mUcMgr, "_verb", verb);
