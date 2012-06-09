@@ -25,6 +25,7 @@ LOCAL_STATIC_LIBRARIES := \
     libaudiohw_legacy \
 
 LOCAL_SHARED_LIBRARIES := \
+    libacdbloader \
     libcutils \
     libutils \
     libmedia \

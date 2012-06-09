@@ -43,6 +43,7 @@
 
 extern "C" {
 #include "csd_client.h"
+#include "acdb-loader.h"
 }
 
 extern "C"
@@ -92,6 +93,10 @@ AudioHardwareALSA::AudioHardwareALSA() :
             mFusion3Platform = false;
             musbPlaybackState = 0;
             musbRecordingState = 0;
+
+            if ((acdb_loader_init_ACDB()) < 0) {
+                LOGE("Failed to initialize ACDB");
+            }
 
             if((fp = fopen("/proc/asound/cards","r")) == NULL) {
                 LOGE("Cannot open /proc/asound/cards file to get sound card info");
@@ -158,6 +163,7 @@ AudioHardwareALSA::~AudioHardwareALSA()
         it->useCase[0] = 0;
         mDeviceList.erase(it);
     }
+    acdb_loader_deallocate_ACDB();
     delete mAudioUsbALSA;
 }
 
