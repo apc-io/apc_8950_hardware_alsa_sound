@@ -161,7 +161,7 @@ static int s_device_close(hw_device_t* device)
 static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 
 static void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode);
-static char *getUCMDevice(uint32_t devices, int input);
+static char *getUCMDevice(uint32_t devices, int input, char *rxDevice);
 static void disableDevice(alsa_handle_t *handle);
 int getUseCaseType(const char *useCase);
 
@@ -342,7 +342,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
             devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                       AudioSystem::DEVICE_OUT_EARPIECE);
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-            devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
+            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                        AudioSystem::DEVICE_OUT_SPEAKER);
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
                    (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
@@ -373,8 +373,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         }
     }
 
-    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
-    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
+    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0, NULL);
+    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1, rxDevice);
 
     if (rxDevice != NULL) {
         if ((handle->handle) && (((!strncmp(rxDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
@@ -504,6 +504,9 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
         if (rx_dev_id == DEVICE_SPEAKER_RX_ACDB_ID && tx_dev_id == DEVICE_HANDSET_TX_ACDB_ID) {
             tx_dev_id = DEVICE_SPEAKER_TX_ACDB_ID;
+        } else if (rx_dev_id == DEVICE_SPEAKER_RX_ACDB_ID &&
+                   tx_dev_id == DEVICE_HANDSET_TX_FV5_ACDB_ID) {
+            tx_dev_id = DEVICE_SPEAKER_TX_FV5_ACDB_ID;
         }
 
         LOGV("rx_dev_id=%d, tx_dev_id=%d\n", rx_dev_id, tx_dev_id);
@@ -1174,7 +1177,7 @@ static void disableDevice(alsa_handle_t *handle)
     free(useCase);
 }
 
-char *getUCMDevice(uint32_t devices, int input)
+char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
 {
     if (!input) {
         if (!(mDevSettingsFlag & TTY_OFF) &&
@@ -1269,10 +1272,23 @@ char *getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
                 if (mDevSettingsFlag & DMIC_FLAG) {
-                    if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
-                        return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
-                    } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
-                        return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                    if (((rxDevice != NULL) &&
+                        !strncmp(rxDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) ||
+                        ((rxDevice == NULL) &&
+                        !strncmp(curRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
+                        if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
+                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                        } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
+                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                        }
+                    } else {
+                        if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
+                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                        } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
+                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
+                        }
                     }
                 } else if (mDevSettingsFlag & QMIC_FLAG){
                     return strdup(SND_USE_CASE_DEV_QUAD_MIC);
@@ -1297,22 +1313,6 @@ char *getUCMDevice(uint32_t devices, int input)
         } else if ((devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
                    (devices & AudioSystem::DEVICE_IN_PROXY)) {
             return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
-        } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
-            if (!strncmp(mic_type, "analog", 6)) {
-                return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
-            } else {
-                if (mDevSettingsFlag & DMIC_FLAG) {
-                    if (fluence_mode == FLUENCE_MODE_ENDFIRE) {
-                        return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
-                    } else if (fluence_mode == FLUENCE_MODE_BROADSIDE) {
-                        return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
-                    }
-                } else if (mDevSettingsFlag & QMIC_FLAG){
-                    return strdup(SND_USE_CASE_DEV_QUAD_MIC);
-                } else {
-                    return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
-                }
-            }
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
