@@ -61,8 +61,6 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             // FALL THROUGH
 
         default:    // FORCE_NONE
-            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
-            if (device) break;
 #ifdef WITH_A2DP
             // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP
             if (!isInCall()) {
@@ -1062,7 +1060,7 @@ uint32_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             device = AudioSystem::DEVICE_IN_ANC_HEADSET;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
-            device = AudioSystem::DEVICE_IN_PROXY;
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
         } else {
             device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
         }
