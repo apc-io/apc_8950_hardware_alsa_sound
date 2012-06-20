@@ -286,7 +286,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         doRouting(0);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "quadmic") {
             mDevSettingsFlag |= QMIC_FLAG;
@@ -430,7 +430,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.add(key, value);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
     if ((mDevSettingsFlag & QMIC_FLAG) &&
                                (mDevSettingsFlag & ~DMIC_FLAG))
@@ -456,6 +456,12 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         if(mBluetoothVGS)
            param.addInt(String8("isVGS"), true);
     }
+    key = String8(AudioParameter::keySurroundRecording);
+    if (param.get(key, value) == NO_ERROR) {
+        value = String8("true");
+        param.add(key, value);
+    }
+
 
     LOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
