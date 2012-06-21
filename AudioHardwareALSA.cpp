@@ -214,6 +214,7 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
 
 status_t  AudioHardwareALSA::setFmVolume(float value)
 {
+    Mutex::Autolock autoLock(mLock);
     status_t status = NO_ERROR;
 
     int vol;
