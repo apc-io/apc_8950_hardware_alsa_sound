@@ -465,8 +465,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     if (rxDevice != NULL) {
         snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
         strlcpy(curRxUCMDevice, rxDevice, sizeof(curRxUCMDevice));
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            s_set_fm_vol(fmVolume);
     }
     if (txDevice != NULL) {
        snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
@@ -486,6 +484,10 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     if (use_case != NULL) {
         free(use_case);
         use_case = NULL;
+    }
+    if (rxDevice != NULL) {
+        if (devices & AudioSystem::DEVICE_OUT_FM)
+            s_set_fm_vol(fmVolume);
     }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 
