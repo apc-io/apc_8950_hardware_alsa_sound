@@ -490,7 +490,8 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         return out;
     }
 
-    if(devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) {
+    if(devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT &&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
@@ -699,7 +700,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
     }
 
-    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) )  {
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) &&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K)))  {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
