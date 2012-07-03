@@ -63,6 +63,10 @@ AudioUsbALSA::AudioUsbALSA()
     musbpfdPlayback = -1;
     mkillPlayBackThread = false;
     mkillRecordingThread = false;
+    musbRecordingHandle = NULL;
+    mproxyRecordingHandle = NULL;
+    musbPlaybackHandle  = NULL;
+    mproxyPlaybackHandle = NULL;
 }
 
 AudioUsbALSA::~AudioUsbALSA()
@@ -232,42 +236,64 @@ status_t AudioUsbALSA::getCap(char * type, int &channels, int &sampleRate)
 void AudioUsbALSA::exitPlaybackThread(uint64_t writeVal)
 {
     LOGD("exitPlaybackThread, mproxypfdPlayback: %d", mproxypfdPlayback);
-    if (writeVal == SIGNAL_EVENT_KILLTHREAD) {
-        int err;
-
-        err = closeDevice(mproxyPlaybackHandle);
-        if (err) {
-            LOGE("Info: Could not close proxy %p", mproxyPlaybackHandle);
-        }
-        err = closeDevice(musbPlaybackHandle);
-        if (err) {
-            LOGE("Info: Could not close USB device %p", musbPlaybackHandle);
-        }
-    }
+    mkillPlayBackThread = true;
     if ((mproxypfdPlayback != -1) && (musbpfdPlayback != -1)) {
         write(mproxypfdPlayback, &writeVal, sizeof(uint64_t));
         write(musbpfdPlayback, &writeVal, sizeof(uint64_t));
-        mkillPlayBackThread = true;
         pthread_join(mPlaybackUsb,NULL);
+        mPlaybackUsb = NULL;
+    }
+
+    if (writeVal == SIGNAL_EVENT_KILLTHREAD || mPlaybackUsb == NULL ) {
+        int err;
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(mproxyPlaybackHandle);
+            if (err) {
+               LOGE("Info: Could not close proxy %p", mproxyPlaybackHandle);
+            }
+            else {
+                mproxyPlaybackHandle = NULL;
+            }
+            err = closeDevice(musbPlaybackHandle);
+            if (err) {
+                LOGE("Info: Could not close USB device %p", musbPlaybackHandle);
+            }
+            else {
+                musbPlaybackHandle = NULL;
+            }
+        }
     }
 }
 
 void AudioUsbALSA::exitRecordingThread(uint64_t writeVal)
 {
+    //TODO: Need to use userspace fd to kill the thread.
+    // Not a valid assumption to blindly close the thread.
     LOGD("exitRecordingThread");
-    if (writeVal == SIGNAL_EVENT_KILLTHREAD) {
-        int err;
+    mkillRecordingThread = true;
 
-        err = closeDevice(mproxyRecordingHandle);
-        if (err) {
-            LOGE("Info: Could not close proxy for recording %p", mproxyRecordingHandle);
-        }
-        err = closeDevice(musbRecordingHandle);
-        if (err) {
-            LOGE("Info: Could not close USB recording device %p", musbRecordingHandle);
+    if (writeVal == SIGNAL_EVENT_KILLTHREAD ||  mRecordingUsb == NULL ) {
+        int err;
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(mproxyRecordingHandle);
+            if (err) {
+                LOGE("Info: Could not close proxy for recording %p", mproxyRecordingHandle);
+            }
+            else {
+                mproxyRecordingHandle = NULL;
+            }
+
+            err = closeDevice(musbRecordingHandle);
+            if (err) {
+                LOGE("Info: Could not close USB recording device %p", musbRecordingHandle);
+            }
+            else {
+                musbRecordingHandle = NULL;
+            }
         }
     }
-    mkillRecordingThread = true;
 }
 
 void AudioUsbALSA::setkillUsbRecordingThread(bool val){
@@ -347,7 +373,8 @@ status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
         params->start_threshold = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
         params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
     }
-    params->stop_threshold = pcm->buffer_size;
+    //Setting stop threshold to a huge value to avoid trigger stop being called internally
+    params->stop_threshold = 0x0FFFFFFF;
 
     params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
     params->silence_size = 0;
@@ -420,7 +447,13 @@ void AudioUsbALSA::RecordingThreadEntry() {
                                             msampleRateCapture, mchannelsCapture,768,false);
     if (!mproxyRecordingHandle) {
         LOGE("ERROR: Could not configure Proxy for recording");
-        closeDevice(musbRecordingHandle);
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(musbRecordingHandle);
+            if(err == OK) {
+                musbRecordingHandle = NULL;
+            }
+        }
         return;
     } else {
         LOGD("Proxy Configured for recording");
@@ -571,9 +604,19 @@ void AudioUsbALSA::RecordingThreadEntry() {
     }
     /***************  End sync up after write -- Proxy *********************/
     if (mkillRecordingThread) {
-        closeDevice(mproxyRecordingHandle);
-        closeDevice(musbRecordingHandle);
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(mproxyRecordingHandle);
+            if(err == OK) {
+                mproxyRecordingHandle = NULL;
+            }
+            err = closeDevice(musbRecordingHandle);
+            if(err == OK) {
+                musbRecordingHandle = NULL;
+            }
+        }
     }
+    mRecordingUsb = NULL;
     LOGD("Exiting USB Recording thread");
 }
 
@@ -606,29 +649,41 @@ struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw, int sampleR
     err = setHardwareParams(handle, sampleRate, channelCount,periodSize);
     if (err != NO_ERROR) {
         LOGE("ERROR: setHardwareParams failed");
-        closeDevice(handle);
-        return NULL;
+        {
+            Mutex::Autolock autoLock(mLock);
+            closeDevice(handle);
+            return NULL;
+        }
     }
 
     err = setSoftwareParams(handle, playback);
     if (err != NO_ERROR) {
         LOGE("ERROR: setSoftwareParams failed");
-        closeDevice(handle);
-        return NULL;
+        {
+            Mutex::Autolock autoLock(mLock);
+            closeDevice(handle);
+            return NULL;
+        }
     }
 
     err = mmap_buffer(handle);
     if (err) {
         LOGE("ERROR: mmap_buffer failed");
-        closeDevice(handle);
-        return NULL;
+        {
+            Mutex::Autolock autoLock(mLock);
+            closeDevice(handle);
+            return NULL;
+        }
     }
 
     err = pcm_prepare(handle);
     if (err) {
         LOGE("ERROR: pcm_prepare failed");
-        closeDevice(handle);
-        return NULL;
+        {
+            Mutex::Autolock autoLock(mLock);
+            closeDevice(handle);
+            return NULL;
+        }
     }
 
     return handle;
@@ -801,7 +856,13 @@ void AudioUsbALSA::PlaybackThreadEntry() {
                                          msampleRatePlayback, mchannelsPlayback, USB_PERIOD_SIZE, true);
     if (!musbPlaybackHandle) {
         LOGE("ERROR: configureUsbDevice failed, returning");
-        closeDevice(musbPlaybackHandle);
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(musbPlaybackHandle);
+            if(err == OK) {
+                musbPlaybackHandle = NULL;
+            }
+        }
         return;
     } else {
         LOGD("USB Configured for playback");
@@ -819,7 +880,13 @@ void AudioUsbALSA::PlaybackThreadEntry() {
                                msampleRatePlayback, mchannelsPlayback, PROXY_PERIOD_SIZE, false);
     if (!mproxyPlaybackHandle) {
         LOGE("ERROR: Could not configure Proxy, returning");
-        closeDevice(musbPlaybackHandle);
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(musbPlaybackHandle);
+            if(err == OK) {
+                musbPlaybackHandle = NULL;
+            }
+        }
         return;
     } else {
         LOGD("Proxy Configured for playback");
@@ -1033,16 +1100,35 @@ void AudioUsbALSA::PlaybackThreadEntry() {
             /***************  End sync up after write -- USB *********************/
         }
     }
-    if (mkillPlayBackThread) {
-        if (proxybuf)
-            free(proxybuf);
-        if (usbbuf)
-            free(usbbuf);
+
+    if (proxybuf)
+        free(proxybuf);
+    if (usbbuf)
+        free(usbbuf);
+    if(mproxypfdPlayback != -1) {
+        close(mproxypfdPlayback);
         mproxypfdPlayback = -1;
-        musbpfdPlayback = -1;
-        closeDevice(mproxyPlaybackHandle);
-        closeDevice(musbPlaybackHandle);
     }
+    if(musbpfdPlayback != -1) {
+        close(musbpfdPlayback);
+        musbpfdPlayback = -1;
+    }
+    if(mkillPlayBackThread) {
+        {
+            Mutex::Autolock autoLock(mLock);
+            err = closeDevice(mproxyPlaybackHandle);
+            LOGE("mproxyPlaybackHandle - err = %d", err);
+            if(err == OK) {
+                mproxyPlaybackHandle = NULL;
+            }
+            err = closeDevice(musbPlaybackHandle);
+            LOGE("musbPlaybackHandle - err = %d", err);
+            if(err == OK) {
+                musbPlaybackHandle = NULL;
+            }
+        }
+    }
+    mPlaybackUsb = NULL;
     LOGD("Exiting USB Playback Thread");
 }
 
