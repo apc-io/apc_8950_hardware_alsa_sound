@@ -1047,6 +1047,15 @@ static status_t s_close(alsa_handle_t *handle)
     handle->rxHandle = 0;
     LOGD("s_close: handle %p h %p", handle, h);
     if (h) {
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL) ||
+             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) &&
+            platform_is_Fusion3()) {
+            err = csd_client_stop_voice();
+            if (err < 0) {
+                LOGE("s_close: csd_client error %d\n", err);
+            }
+        }
+
         LOGV("s_close rxHandle\n");
         err = pcm_close(h);
         if(err != NO_ERROR) {
@@ -1058,19 +1067,10 @@ static status_t s_close(alsa_handle_t *handle)
     handle->handle = 0;
 
     if (h) {
-          LOGV("s_close handle h %p\n", h);
+        LOGV("s_close handle h %p\n", h);
         err = pcm_close(h);
         if(err != NO_ERROR) {
             LOGE("s_close: pcm_close failed for handle with err %d", err);
-        }
-
-        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL) ||
-             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) &&
-            platform_is_Fusion3()) {
-            err = csd_client_stop_voice();
-            if (err < 0) {
-                LOGE("s_close: csd_client error %d\n", err);
-            }
         }
 
         disableDevice(handle);
