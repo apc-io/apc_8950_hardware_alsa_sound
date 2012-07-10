@@ -828,7 +828,7 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
             setStrategyMute(STRATEGY_MEDIA, true, mHardwareOutput);
         }
         // wait for the PCM output buffers to empty before proceeding with the rest of the command
-        usleep(outputDesc->mLatency*2*1000);
+        usleep(outputDesc->mLatency*3*1000);
     }
 
     // wait for output buffers to be played on the HDMI device before routing to new device
@@ -862,6 +862,7 @@ void AudioPolicyManager::setOutputDevice(audio_io_handle_t output, uint32_t devi
         || prevDevice == (AudioSystem::DEVICE_OUT_SPEAKER | AudioSystem::DEVICE_OUT_WIRED_HEADSET | AudioSystem::DEVICE_OUT_FM)
         || prevDevice == (AudioSystem::DEVICE_OUT_SPEAKER | AudioSystem::DEVICE_OUT_WIRED_HEADPHONE | AudioSystem::DEVICE_OUT_FM)
         || prevDevice == (AudioSystem::DEVICE_OUT_SPEAKER | AudioSystem::DEVICE_OUT_FM_TX)) {
+        usleep(outputDesc->mLatency*3*1000);
         setStrategyMute(STRATEGY_MEDIA, false, output, delayMs);
         // Unmute LPA output also if it belongs to STRATEGY_MEDIA
         if(((mLPADecodeOutput != -1) && (mLPADecodeOutput != output) &&
