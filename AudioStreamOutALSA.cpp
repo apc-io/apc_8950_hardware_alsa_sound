@@ -117,48 +117,44 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
          (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
          (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
-        /* PCM handle might be closed and reopened immediately to flush
-         * the buffers, recheck and break if PCM handle is valid */
-        if (mHandle->handle == NULL && mHandle->rxHandle == NULL) {
-            snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
-            if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-                 if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
-                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,sizeof(mHandle->useCase));
-                 }
-                 else {
-                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
-                 }
-            } else {
-                if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,sizeof(mHandle->useCase));
-                } else {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
-                }
-            }
-            free(use_case);
-            if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-                (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-                  mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
-            } else {
-                  mHandle->module->route(mHandle, mDevices , mParent->mode());
-            }
-            if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI) ||
-                !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
-                snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
-            } else {
-                snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
-            }
-            if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-                 err = mHandle->module->startVoipCall(mHandle);
-            }
-            else
-                mHandle->module->open(mHandle);
-            if(mHandle->handle == NULL) {
-                LOGE("write:: device open failed");
-                mParent->mLock.unlock();
-                return 0;
-            }
+        snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
+                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,sizeof(mHandle->useCase));
+             }
+             else {
+                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
+             }
+        } else {
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,sizeof(mHandle->useCase));
+             } else {
+                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
+             }
+        }
+        free(use_case);
+        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+              mHandle->module->route(mHandle, mDevices , AudioSystem::MODE_IN_COMMUNICATION);
+        } else {
+              mHandle->module->route(mHandle, mDevices , mParent->mode());
+        }
+        if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+            snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
+        } else {
+            snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
+        }
+        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+          (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+             err = mHandle->module->startVoipCall(mHandle);
+        }
+        else
+             mHandle->module->open(mHandle);
+        if(mHandle->handle == NULL) {
+            LOGE("write:: device open failed");
+            mParent->mLock.unlock();
+            return 0;
         }
         mParent->mLock.unlock();
     }
