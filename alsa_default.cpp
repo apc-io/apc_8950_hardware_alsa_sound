@@ -376,22 +376,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0, NULL);
     txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1, rxDevice);
 
-    if (rxDevice != NULL) {
-        if ((handle->handle) && (((!strncmp(rxDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
-            ((!strncmp(curRxUCMDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
-            (!strncmp(curRxUCMDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))) ||
-            (((!strncmp(curRxUCMDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
-            ((!strncmp(rxDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
-            (!strncmp(rxDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))))) &&
-            ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI, strlen(SND_USE_CASE_VERB_HIFI))) ||
-            (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, strlen(SND_USE_CASE_MOD_PLAY_MUSIC))))) {
-            pcm_close(handle->handle);
-            handle->handle=NULL;
-            handle->rxHandle=NULL;
-            pflag = true;
-        }
-    }
-
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, curRxUCMDevice, MAX_STR_LEN)) ||
              (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) && (mode == AudioSystem::MODE_IN_CALL))
@@ -517,11 +501,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
         {
             LOGE("csd_client_disable_device failed, error %d", err);
         }
-    }
-
-    if (pflag == true) {
-        s_open(handle);
-        pflag = false;
     }
 
     if (rxDevice != NULL) {
