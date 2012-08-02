@@ -378,10 +378,12 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, curRxUCMDevice, MAX_STR_LEN)) ||
-             (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) && (mode == AudioSystem::MODE_IN_CALL))
+             (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) &&
+            ((mode == AudioSystem::MODE_IN_CALL)  ||
+             (mode == AudioSystem::MODE_IN_COMMUNICATION)))
             inCallDevSwitch = true;
     }
-    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
+    if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
         err = csd_client_disable_device();
         if (err < 0)
         {
@@ -475,7 +477,8 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
     }
     LOGD("switchDevice: curTxUCMDevivce %s curRxDevDevice %s", curTxUCMDevice, curRxUCMDevice);
 
-    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
+
+    if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
         /* get tx acdb id */
         memset(&ident,0,sizeof(ident));
         strlcpy(ident, "ACDBID/", sizeof(ident));
