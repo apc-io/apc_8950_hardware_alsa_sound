@@ -388,8 +388,17 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, curRxUCMDevice, MAX_STR_LEN)) ||
-             (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) && (mode == AudioSystem::MODE_IN_CALL))
+             (strncmp(txDevice, curTxUCMDevice, MAX_STR_LEN))) &&
+            ((mode == AudioSystem::MODE_IN_CALL)  ||
+             (mode == AudioSystem::MODE_IN_COMMUNICATION)))
             inCallDevSwitch = true;
+    }
+    if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
+        err = csd_client_disable_device();
+        if (err < 0)
+        {
+            LOGE("csd_client_disable_device, failed, error %d", err);
+        }
     }
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
     mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
@@ -448,13 +457,6 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
        }
     }
     LOGV("%s,rxDev:%s, txDev:%s, curRxDev:%s, curTxDev:%s\n", __FUNCTION__, rxDevice, txDevice, curRxUCMDevice, curTxUCMDevice);
-    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
-        err = csd_client_disable_device();
-        if (err < 0)
-        {
-            LOGE("csd_client_disable_device, failed, error %d", err);
-        }
-    }
 
     if (rxDevice != NULL) {
         snd_use_case_set(handle->ucMgr, "_enadev", rxDevice);
@@ -509,7 +511,7 @@ void switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
          }
     }
 
-    if (mode == AudioSystem::MODE_IN_CALL && platform_is_Fusion3() && (inCallDevSwitch == true)) {
+    if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
         /* get tx acdb id */
         memset(&ident,0,sizeof(ident));
         strlcpy(ident, "ACDBID/", sizeof(ident));
