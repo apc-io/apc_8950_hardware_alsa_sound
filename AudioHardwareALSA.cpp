@@ -247,11 +247,12 @@ status_t AudioHardwareALSA::setMode(int mode)
     }
 
     if (mode == AudioSystem::MODE_IN_CALL) {
-        mCallState = AudioSystem::CS_ACTIVE;
-    }else if (mode == AudioSystem::MODE_NORMAL) {
+       if (mCallState == AudioSystem::CS_INACTIVE)
+           mCallState = AudioSystem::CS_ACTIVE;
+    } else if (mode == AudioSystem::MODE_NORMAL) {
         mCallState = 0;
     }
-
+    LOGD("set mode : call state %d , Mode %d",mCallState,mode);
     return status;
 }
 
@@ -334,6 +335,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     key = String8(AudioParameter::keyRouting);
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
+        LOGD("AudioHardwareALSA::SetParameters() keyRouting device %d",device);
         if(device) {
             doRouting(device);
         }
@@ -407,6 +409,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     }
     key = String8(MODE_CALL_KEY);
     if (param.getInt(key,state) == NO_ERROR) {
+        LOGD("AudioHardwareALSA::SetParameters() mCallState %d state %d",mCallState,state);
         if (mCallState != state) {
             mCallState = state;
             doRouting(0);
