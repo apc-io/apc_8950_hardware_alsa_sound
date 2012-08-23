@@ -192,8 +192,8 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         LOGD("setParameters(): keyRouting with device %d", device);
-        mDevices = device;
         if(device) {
+            mDevices = device;
             mParent->doRouting(device);
         }
         param.remove(key);
@@ -202,8 +202,8 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
         LOGD("setParameters(): handleFm with device %d", device);
-        mDevices = device;
             if(device) {
+                mDevices = device;
                 mParent->handleFm(device);
             }
             param.remove(key);
