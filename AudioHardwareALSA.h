@@ -19,14 +19,17 @@
 #define ANDROID_AUDIO_HARDWARE_ALSA_H
 
 #include <utils/List.h>
+#include <utils/threads.h>
 #include <hardware_legacy/AudioHardwareBase.h>
 
 #include <alsa/asoundlib.h>
 
 #include <hardware/hardware.h>
 
-namespace android
+namespace android_audio_legacy
 {
+using android::Mutex;
+using android::List;
 
 class AudioHardwareALSA;
 
@@ -261,6 +264,15 @@ public:
     // Unit: the number of input audio frames
     virtual unsigned int  getInputFramesLost() const;
 
+    virtual status_t addAudioEffect(effect_handle_t effect)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t removeAudioEffect(effect_handle_t effect)
+    {
+        return NO_ERROR;
+    }
+
     status_t            setAcousticParams(void* params);
 
     status_t            open(int mode);
@@ -312,7 +324,7 @@ public:
 
     // Returns audio input buffer size according to parameters passed or 0 if one of the
     // parameters is not supported
-    //virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
+    virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channels);
 
     /** This method creates and opens the audio hardware output stream */
     virtual AudioStreamOut* openOutputStream(
@@ -360,5 +372,5 @@ protected:
 
 // ----------------------------------------------------------------------------
 
-};        // namespace android
+};        // namespace android_audio_legacy
 #endif    // ANDROID_AUDIO_HARDWARE_ALSA_H

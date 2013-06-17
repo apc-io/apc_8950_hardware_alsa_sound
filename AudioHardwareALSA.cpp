@@ -38,12 +38,12 @@ extern "C"
     //
     // Function for dlsym() to look up for creating a new AudioHardwareInterface.
     //
-    android::AudioHardwareInterface *createAudioHardware(void) {
-        return android::AudioHardwareALSA::create();
+    android_audio_legacy::AudioHardwareInterface *createAudioHardware(void) {
+        return android_audio_legacy::AudioHardwareALSA::create();
     }
 }         // extern "C"
 
-namespace android
+namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
@@ -150,6 +150,7 @@ status_t AudioHardwareALSA::setMode(int mode)
     if (mode != mMode) {
         status = AudioHardwareBase::setMode(mode);
 
+#if 0  //TO DO
         if (status == NO_ERROR) {
             // take care of mode change.
             for(ALSAHandleList::iterator it = mDeviceList.begin();
@@ -160,6 +161,7 @@ status_t AudioHardwareALSA::setMode(int mode)
                         break;
                 }
         }
+#endif
     }
 
     return status;
@@ -241,6 +243,44 @@ AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
     delete in;
 }
 
+size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
+{
+	size_t bufSize;
+	
+    if (format != AudioSystem::PCM_16_BIT) {
+        LOGW("getInputBufferSize bad format: %d", format);
+        return 0;
+    }
+    if (channelCount < 1 || channelCount > 2) {
+        LOGW("getInputBufferSize bad channel count: %d", channelCount);
+        return 0;
+    }
+    if (sampleRate < 8000 || sampleRate > 48000) {
+        LOGW("getInputBufferSize bad sample rate: %d", sampleRate);
+        return 0;
+    }
+    
+#if 1    
+    if (sampleRate < 11025) {
+        bufSize = 320;
+    } else if (sampleRate < 22050) {
+        bufSize = 512;
+    } else if (sampleRate < 32000) {
+        bufSize = 768;
+    } else if (sampleRate < 44100) {
+        bufSize = 1024;
+    } else {
+        bufSize = 1536;
+    }
+#else    
+    bufSize = 2048;
+#endif    
+    
+    LOGW("AudioHardwareALSA: getInputBufferSize sampling rate: %d, channel: %d", sampleRate, channelCount);
+
+    return bufSize*channelCount;
+}
+
 status_t AudioHardwareALSA::setMicMute(bool state)
 {
     if (mMixer)
@@ -262,4 +302,4 @@ status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
     return NO_ERROR;
 }
 
-}       // namespace android
+}       // namespace android_audio_legacy

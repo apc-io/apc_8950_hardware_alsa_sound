@@ -42,7 +42,8 @@
     if (strlen(x) + strlen(y) < ALSA_NAME_MAX) \
         strcat(x, y);
 
-namespace android
+#define WMT_TEST
+namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
@@ -76,6 +77,9 @@ mixerProp[][SND_PCM_STREAM_LAST+1] = {
     ALSA_PROP(AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP, "bluetooth.a2dp", "Bluetooth A2DP", "Bluetooth A2DP Capture"),
     ALSA_PROP(static_cast<AudioSystem::audio_devices>(0), "", NULL, NULL)
 };
+#ifdef WMT_TEST
+static bool capture_mute_state;//temporarily variable
+#endif
 
 struct mixer_info_t
 {
@@ -161,8 +165,8 @@ ALSAMixer::ALSAMixer()
 {
     int err;
 
-    initMixer (&mMixer[SND_PCM_STREAM_PLAYBACK], "AndroidOut");
-    initMixer (&mMixer[SND_PCM_STREAM_CAPTURE], "AndroidIn");
+    initMixer (&mMixer[SND_PCM_STREAM_PLAYBACK], "AndroidPlayback");
+    initMixer (&mMixer[SND_PCM_STREAM_CAPTURE], "AndroidCapture");
 
     snd_mixer_selem_id_t *sid;
     snd_mixer_selem_id_alloca(&sid);
@@ -350,6 +354,9 @@ status_t ALSAMixer::setGain(uint32_t device, float gain)
 
 status_t ALSAMixer::setCaptureMuteState(uint32_t device, bool state)
 {
+#ifdef WMT_TEST
+    capture_mute_state = state;
+#else//TO DO
     for (int j = 0; mixerProp[j][SND_PCM_STREAM_CAPTURE].device; j++)
         if (mixerProp[j][SND_PCM_STREAM_CAPTURE].device & device) {
 
@@ -369,13 +376,20 @@ status_t ALSAMixer::setCaptureMuteState(uint32_t device, bool state)
             info->mute = state;
         }
 
+#endif
     return NO_ERROR;
 }
 
 status_t ALSAMixer::getCaptureMuteState(uint32_t device, bool *state)
 {
     if (!state) return BAD_VALUE;
+    
+#ifdef WMT_TEST 
+    *state = capture_mute_state;
+    LOGE("mute state = %x", *state);
 
+    return NO_ERROR;
+#else //TO DO
     for (int j = 0; mixerProp[j][SND_PCM_STREAM_CAPTURE].device; j++)
         if (mixerProp[j][SND_PCM_STREAM_CAPTURE].device & device) {
 
@@ -387,6 +401,7 @@ status_t ALSAMixer::getCaptureMuteState(uint32_t device, bool *state)
         }
 
     return BAD_VALUE;
+#endif
 }
 
 status_t ALSAMixer::setPlaybackMuteState(uint32_t device, bool state)

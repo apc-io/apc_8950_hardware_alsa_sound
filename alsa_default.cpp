@@ -33,9 +33,11 @@
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
 
-namespace android
+//namespace android
+namespace android_audio_legacy
 {
 
+using android::AudioRecord;
 static int s_device_open(const hw_module_t*, const char*, hw_device_t**);
 static int s_device_close(hw_device_t*);
 static status_t s_init(alsa_device_t *, ALSAHandleList &);
@@ -107,7 +109,8 @@ static alsa_handle_t _defaultsOut = {
     channels    : 2,
     sampleRate  : DEFAULT_SAMPLE_RATE,
     latency     : 200000, // Desired Delay in usec
-    bufferSize  : DEFAULT_SAMPLE_RATE / 5, // Desired Number of samples
+    /*bufferSize  : DEFAULT_SAMPLE_RATE / 5,*/ // Desired Number of samples
+    bufferSize  : 4096,
     modPrivate  : 0,
 };
 
@@ -118,7 +121,7 @@ static alsa_handle_t _defaultsIn = {
     curMode     : 0,
     handle      : 0,
     format      : SND_PCM_FORMAT_S16_LE, // AudioSystem::PCM_16_BIT
-    channels    : 1,
+    channels    : 2,
     sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
     latency     : 250000, // Desired Delay in usec
     bufferSize  : 2048, // Desired Number of samples
